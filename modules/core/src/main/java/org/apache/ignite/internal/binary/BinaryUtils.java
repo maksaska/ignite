@@ -97,23 +97,28 @@ public class BinaryUtils {
     public static final String MAPPING_FILE_EXTENSION = ".classname";
 
     /** */
-    public static final Map<Class<?>, Byte> PLAIN_CLASS_TO_FLAG = new HashMap<>();
+    public static final Map<Class<?>, Byte> PLAIN_CLASS_TO_FLAG = Map.of();
 
     /** */
-    public static final Map<Byte, Class<?>> FLAG_TO_CLASS = new HashMap<>();
+    public static final Map<Byte, Class<?>> FLAG_TO_CLASS = Map.of();
 
     /** */
     public static final boolean USE_STR_SERIALIZATION_VER_2 = IgniteSystemProperties.getBoolean(
         IGNITE_BINARY_MARSHALLER_USE_STRING_SERIALIZATION_VER_2, false);
 
     /** Map from class to associated write replacer. */
-    public static final Map<Class, BinaryWriteReplacer> CLS_TO_WRITE_REPLACER = new HashMap<>();
+    public static final Map<Class, BinaryWriteReplacer> CLS_TO_WRITE_REPLACER = Map.of();
 
     /** {@code true} if serialized value of this type cannot contain references to objects. */
     private static final boolean[] PLAIN_TYPE_FLAG = new boolean[102];
 
     /** Binary classes. */
-    private static final Collection<Class<?>> BINARY_CLS = new HashSet<>();
+    private static final Collection<Class<?>> BINARY_CLS = Set.of(
+        Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class, Character.class, Boolean.class,
+        String.class, UUID.class, Date.class, Timestamp.class, Time.class, BigDecimal.class,
+        byte[].class, short[].class, int[].class, long[].class, float[].class, double[].class, char[].class, boolean[].class,
+        String[].class, UUID[].class, Date[].class, Timestamp[].class, Time[].class, BigDecimal[].class
+    );
 
     /** Class for SingletonList obtained at runtime. */
     public static final Class<? extends Collection> SINGLETON_LIST_CLS = Collections.singletonList(null).getClass();
@@ -227,35 +232,6 @@ public class BinaryUtils {
 
             PLAIN_TYPE_FLAG[b] = true;
         }
-
-        BINARY_CLS.add(Byte.class);
-        BINARY_CLS.add(Short.class);
-        BINARY_CLS.add(Integer.class);
-        BINARY_CLS.add(Long.class);
-        BINARY_CLS.add(Float.class);
-        BINARY_CLS.add(Double.class);
-        BINARY_CLS.add(Character.class);
-        BINARY_CLS.add(Boolean.class);
-        BINARY_CLS.add(String.class);
-        BINARY_CLS.add(UUID.class);
-        BINARY_CLS.add(Date.class);
-        BINARY_CLS.add(Timestamp.class);
-        BINARY_CLS.add(Time.class);
-        BINARY_CLS.add(BigDecimal.class);
-        BINARY_CLS.add(byte[].class);
-        BINARY_CLS.add(short[].class);
-        BINARY_CLS.add(int[].class);
-        BINARY_CLS.add(long[].class);
-        BINARY_CLS.add(float[].class);
-        BINARY_CLS.add(double[].class);
-        BINARY_CLS.add(char[].class);
-        BINARY_CLS.add(boolean[].class);
-        BINARY_CLS.add(String[].class);
-        BINARY_CLS.add(UUID[].class);
-        BINARY_CLS.add(Date[].class);
-        BINARY_CLS.add(Timestamp[].class);
-        BINARY_CLS.add(Time[].class);
-        BINARY_CLS.add(BigDecimal[].class);
 
         FIELD_TYPE_NAMES = new String[104];
 
