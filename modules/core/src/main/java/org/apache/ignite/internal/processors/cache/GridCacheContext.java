@@ -104,7 +104,7 @@ import org.apache.ignite.internal.processors.plugin.CachePluginManager;
 import org.apache.ignite.internal.processors.query.schema.operation.SchemaAddQueryEntityOperation;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutProcessor;
 import org.apache.ignite.internal.util.F0;
-import org.apache.ignite.internal.util.lang.GridFunc;
+import org.apache.ignite.internal.util.lang.gridfunc.HasNotEqualIdPredicate;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.C1;
 import org.apache.ignite.internal.util.typedef.F;
@@ -132,6 +132,7 @@ import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_STARTED;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_STOPPED;
 import static org.apache.ignite.internal.IgniteNodeAttributes.ATTR_MACS;
 import static org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionState.OWNING;
+import static org.apache.ignite.internal.util.lang.ClusterNodeFunc.nodeIds;
 
 /**
  * Cache context.
@@ -1505,9 +1506,9 @@ public class GridCacheContext<K, V> implements Externalizable {
         Collection<ClusterNode> dhtNodes = dht().topology().nodes(entry.partition(), topVer);
 
         if (log.isDebugEnabled())
-            log.debug("Mapping entry to DHT nodes [nodes=" + U.nodeIds(dhtNodes) + ", entry=" + entry + ']');
+            log.debug("Mapping entry to DHT nodes [nodes=" + nodeIds(dhtNodes) + ", entry=" + entry + ']');
 
-        Collection<ClusterNode> dhtRemoteNodes = F.view(dhtNodes, F.remoteNodes(nodeId())); // Exclude local node.
+        Collection<ClusterNode> dhtRemoteNodes = F.view(dhtNodes, new HasNotEqualIdPredicate<>(nodeId())); // Exclude local node.
 
         map(entry, dhtRemoteNodes, dhtMap);
 
@@ -1522,7 +1523,7 @@ public class GridCacheContext<K, V> implements Externalizable {
                 nearNodes = discovery().nodes(readers, F0.notEqualTo(nearNodeId));
 
                 if (log.isDebugEnabled())
-                    log.debug("Mapping entry to near nodes [nodes=" + U.nodeIds(nearNodes) + ", entry=" + entry + ']');
+                    log.debug("Mapping entry to near nodes [nodes=" + nodeIds(nearNodes) + ", entry=" + entry + ']');
             }
             else if (log.isDebugEnabled())
                 log.debug("Entry has no near readers: " + entry);
@@ -1564,7 +1565,7 @@ public class GridCacheContext<K, V> implements Externalizable {
             Collection<ClusterNode> dhtNodes = cand.mappedDhtNodes();
 
             if (log.isDebugEnabled())
-                log.debug("Mapping explicit lock to DHT nodes [nodes=" + U.nodeIds(dhtNodes) + ", entry=" + entry + ']');
+                log.debug("Mapping explicit lock to DHT nodes [nodes=" + nodeIds(dhtNodes) + ", entry=" + entry + ']');
 
             Collection<ClusterNode> nearNodes = cand.mappedNearNodes();
 
