@@ -160,7 +160,7 @@ public class BinaryObjectBuilderImpl implements BinaryObjectBuilder {
                 throw new BinaryInvalidTypeException("Failed to load the class: " + clsNameToWrite, e);
             }
 
-            this.typeId = ctx.registerClass(cls, true, false).typeId();
+            this.typeId = ctx.registerClass(cls, true, false);
 
             registeredType = false;
 
