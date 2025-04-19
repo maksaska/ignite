@@ -396,7 +396,7 @@ public class GridBinaryMarshaller {
      * @return Deserialized object.
      * @throws org.apache.ignite.binary.BinaryObjectException In case of error.
      */
-    @Nullable public <T> T deserialize(BinaryInputStream in, @Nullable ClassLoader ldr,
+    @Nullable <T> T deserialize(BinaryInputStream in, @Nullable ClassLoader ldr,
         @Nullable BinaryReaderHandles hnds) throws BinaryObjectException {
         BinaryContext oldCtx = pushContext(ctx);
 

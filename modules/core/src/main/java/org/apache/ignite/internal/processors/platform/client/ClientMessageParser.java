@@ -441,7 +441,7 @@ public class ClientMessageParser implements ClientListenerMessageParser {
 
         // skipHdrCheck must be true (we have 103 op code).
         BinaryReaderExImpl reader = new BinaryReaderExImpl(marsh.context(), inStream,
-                null, null, true, true);
+                null, true, true);
 
         ClientListenerRequest req = decode(reader);
 

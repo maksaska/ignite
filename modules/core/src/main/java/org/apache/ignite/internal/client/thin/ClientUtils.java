@@ -552,7 +552,7 @@ public final class ClientUtils {
      * @param in Input stream.
      */
     static BinaryReaderExImpl createBinaryReader(@Nullable BinaryContext binaryCtx, BinaryInputStream in) {
-        return new BinaryReaderExImpl(binaryCtx, in, null, null, true, true);
+        return new BinaryReaderExImpl(binaryCtx, in, null, true, true);
     }
 
     /** Read Ignite binary object from input stream. */

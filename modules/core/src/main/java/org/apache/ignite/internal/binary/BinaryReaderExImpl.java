@@ -184,7 +184,7 @@ public class BinaryReaderExImpl extends BinaryReaderHandlesHolder implements Bin
      * @param hnds Context.
      * @param forUnmarshal {@code True} if reader is need to unmarshal object.
      */
-    public BinaryReaderExImpl(BinaryContext ctx,
+    BinaryReaderExImpl(BinaryContext ctx,
         BinaryInputStream in,
         ClassLoader ldr,
         @Nullable BinaryReaderHandles hnds,
@@ -203,11 +203,33 @@ public class BinaryReaderExImpl extends BinaryReaderHandlesHolder implements Bin
      * @param ctx Context.
      * @param in Input stream.
      * @param ldr Class loader.
-     * @param hnds Context.
      * @param skipHdrCheck Whether to skip header check.
      * @param forUnmarshal {@code True} if reader is need to unmarshal object.
      */
     public BinaryReaderExImpl(BinaryContext ctx,
+        BinaryInputStream in,
+        ClassLoader ldr,
+        boolean skipHdrCheck,
+        boolean forUnmarshal) {
+        this(ctx,
+            in,
+            ldr,
+            null,
+            skipHdrCheck,
+            forUnmarshal);
+    }
+
+    /**
+     * Constructor.
+     *
+     * @param ctx Context.
+     * @param in Input stream.
+     * @param ldr Class loader.
+     * @param hnds Context.
+     * @param skipHdrCheck Whether to skip header check.
+     * @param forUnmarshal {@code True} if reader is need to unmarshal object.
+     */
+    BinaryReaderExImpl(BinaryContext ctx,
         BinaryInputStream in,
         ClassLoader ldr,
         @Nullable BinaryReaderHandles hnds,
