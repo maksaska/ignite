@@ -20,10 +20,7 @@ package org.apache.ignite.internal.binary;
 /**
  * Simple holder for handles.
  */
-class BinaryReaderHandlesHolderImpl implements BinaryReaderHandlesHolder {
-    /** Handles. */
-    private BinaryReaderHandles hnds;
-
+class BinaryReaderHandlesHolderImpl extends BinaryReaderHandlesHolder {
     /** {@inheritDoc} */
     @Override public void setHandle(Object obj, int pos) {
         handles().put(pos, obj);
@@ -32,14 +29,6 @@ class BinaryReaderHandlesHolderImpl implements BinaryReaderHandlesHolder {
     /** {@inheritDoc} */
     @Override public Object getHandle(int pos) {
         return hnds != null ? hnds.get(pos) : null;
-    }
-
-    /** {@inheritDoc} */
-    @Override public BinaryReaderHandles handles() {
-        if (hnds == null)
-            hnds = new BinaryReaderHandles();
-
-        return hnds;
     }
 
     /** {@inheritDoc} */

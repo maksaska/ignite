@@ -36,6 +36,7 @@ import org.apache.ignite.binary.BinaryObject;
 import org.apache.ignite.binary.BinaryObjectException;
 import org.apache.ignite.binary.BinaryRawReader;
 import org.apache.ignite.binary.BinaryReader;
+import org.apache.ignite.internal.binary.streams.BinaryHeapInputStream;
 import org.apache.ignite.internal.binary.streams.BinaryInputStream;
 import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.typedef.internal.S;
@@ -92,7 +93,7 @@ import static org.apache.ignite.internal.binary.GridBinaryMarshaller.UUID_ARR;
  * Binary reader implementation.
  */
 @SuppressWarnings("unchecked")
-public class BinaryReaderExImpl implements BinaryReader, BinaryRawReaderEx, BinaryReaderHandlesHolder, ObjectInput {
+public class BinaryReaderExImpl extends BinaryReaderHandlesHolder implements BinaryReader, BinaryRawReaderEx, ObjectInput {
     /** Binary context. */
     private final BinaryContext ctx;
 
@@ -152,6 +153,11 @@ public class BinaryReaderExImpl implements BinaryReader, BinaryRawReaderEx, Bina
 
     /** Whether stream is in raw mode. */
     private boolean raw;
+
+    /** */
+    public static BinaryReaderExImpl of(BinaryContext ctx, byte[] arr, int start, BinaryReaderExImpl reader) {
+        return new BinaryReaderExImpl(ctx, BinaryHeapInputStream.create(arr, start), null, reader.handles(), false);
+    }
 
     /**
      * Constructor.
@@ -401,14 +407,6 @@ public class BinaryReaderExImpl implements BinaryReader, BinaryRawReaderEx, Bina
     /** {@inheritDoc} */
     @Override public Object getHandle(int pos) {
         return hnds != null ? hnds.get(pos) : null;
-    }
-
-    /** {@inheritDoc} */
-    @Override public BinaryReaderHandles handles() {
-        if (hnds == null)
-            hnds = new BinaryReaderHandles();
-
-        return hnds;
     }
 
     /**

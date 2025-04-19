@@ -86,11 +86,7 @@ class BinaryBuilderReader implements BinaryPositionReadable {
         this.arr = other.arr;
         this.pos = start;
 
-        reader = new BinaryReaderExImpl(ctx,
-            BinaryHeapInputStream.create(arr, start),
-            null,
-            other.reader.handles(),
-            false);
+        reader = BinaryReaderExImpl.of(ctx, arr, start, other.reader);
 
         this.objMap = other.objMap;
     }
