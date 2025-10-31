@@ -22,6 +22,9 @@ from time import monotonic
 from ducktape.cluster.remoteaccount import RemoteCommandError
 from ducktape.tests.test import Test, TestContext
 
+from ignitetest.services.ignite import IgniteService
+from ignitetest.services.utils.control_utility import ControlUtility
+from ignitetest.services.utils.decorators import memoize
 from ignitetest.services.utils.ducktests_service import DucktestsService
 
 # globals:
@@ -56,7 +59,30 @@ class IgniteTestContext(TestContext):
             return IgniteTestContext(test_context)
 
 
-class IgniteTest(Test):
+class IgniteTestMixin:
+    """
+    Mixin to IgniteTest, exposing useful static utility methods
+    """
+    @staticmethod
+    def check_topology(ignite: IgniteService, fin_top_ver: int):
+        """
+        Check current topology version.
+        """
+        top_ver = IgniteTestMixin.control_utility(ignite).cluster_state().topology_version
+
+        assert top_ver == fin_top_ver, f'Cluster current topology version={top_ver}, ' \
+                                       f'expected topology version={fin_top_ver}.'
+
+    @staticmethod
+    @memoize
+    def control_utility(ignite: IgniteService):
+        """
+        :return: ControlUtility instance.
+        """
+        return ControlUtility(ignite)
+
+
+class IgniteTest(Test, IgniteTestMixin):
     """
     Basic ignite test.
     """
