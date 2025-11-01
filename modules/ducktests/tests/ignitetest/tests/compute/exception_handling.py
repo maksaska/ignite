@@ -21,6 +21,7 @@ from ignitetest.services.ignite_app import IgniteApplicationService
 from ignitetest.services.utils.ignite_configuration import IgniteConfiguration
 from ignitetest.services.utils.ignite_configuration.discovery import from_ignite_cluster
 from ignitetest.tests.rebalance.util import NUM_NODES
+from ignitetest.tests.thin_client_query_test import return_spec_without_ducktests
 from ignitetest.utils import cluster, ignite_versions
 from ignitetest.utils.ignite_test import IgniteTest
 from ignitetest.utils.version import DEV_BRANCH, IgniteVersion
@@ -35,7 +36,9 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
     def test_compute_runnable(self, ignite_version):
         node_config = IgniteConfiguration(
             version=IgniteVersion(ignite_version),
-            metric_exporters={"org.apache.ignite.spi.metric.jmx.JmxMetricExporterSpi"})
+            metric_exporters={"org.apache.ignite.spi.metric.jmx.JmxMetricExporterSpi"},
+            peer_class_loading_enabled=True
+        )
 
         nodes_count = self.test_context.expected_num_nodes - 1
 
@@ -43,6 +46,8 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
             self.test_context,
             config=node_config,
             num_nodes=nodes_count)
+
+        ignites.spec = return_spec_without_ducktests(service=ignites, base_spec=ignites.spec.__class__)
 
         ignites.start()
 
