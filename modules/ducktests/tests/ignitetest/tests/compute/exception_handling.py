@@ -33,6 +33,7 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
     """
     Tests custom compute runnable exception handling by thick client.
     """
+
     @cluster(num_nodes=NUM_NODES)
     @ignite_versions(str(DEV_BRANCH))
     def test_compute_runnable(self, ignite_version):
@@ -64,6 +65,10 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
 
         app.start_async()
 
+        app.await_event("Exception generation finished successfully.", 60, from_the_beginning=True)
+
         app.await_stopped()
 
         check_topology(control_sh, nodes_count + 2)
+
+        ignites.stop()
