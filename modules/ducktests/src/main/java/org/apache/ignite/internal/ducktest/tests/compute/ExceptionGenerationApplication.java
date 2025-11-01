@@ -109,29 +109,31 @@ public class ExceptionGenerationApplication extends IgniteAwareApplication {
             run.run();
         }
         catch (Throwable e) {
-            if (exp.getClass() == e.getClass() && e instanceof SerializableException) {
-                SerializableException se = (SerializableException)e;
+            Throwable ex = getCauseForRemoteJobException(e);
 
-                if (exp.getMessage() != null && (e.getMessage() == null || !e.getMessage().contains(exp.getMessage()))) {
-                    log.info("Unexpected exception message: [msg=" + e.getMessage() + ']');
+            if (exp.getClass().isInstance(ex)) {
+                SerializableException se = (SerializableException)ex;
 
-                    throw new AssertionError("Unexpected message for thrown exception.", e);
+                if (exp.getMessage() != null && (se.getMessage() == null || !se.getMessage().contains(exp.getMessage()))) {
+                    log.info("Unexpected exception message: [msg=" + se.getMessage() + ']');
+
+                    throw new AssertionError("Unexpected message for thrown exception.", se);
                 }
 
-                if (se.getCode() == exp.getCode()) {
+                if (se.getCode() != exp.getCode()) {
                     log.info("Unexpected exception code: [code=" + se.getCode() + ']');
 
-                    throw new AssertionError("Unexpected code for thrown exception.", e);
+                    throw new AssertionError("Unexpected code for thrown exception.", se);
                 }
 
                 if (exp.getDetails() != null && (se.getDetails() == null || !se.getDetails().contains(exp.getDetails()))) {
-                    log.info("Unexpected exception detais: [details=" + se.getDetails() + ']');
+                    log.info("Unexpected exception details: [details=" + se.getDetails() + ']');
 
-                    throw new AssertionError("Unexpected details for thrown exception.", e);
+                    throw new AssertionError("Unexpected details for thrown exception.", se);
                 }
 
-                if (e.getStackTrace() == null)
-                    throw new AssertionError("Exception has no stacktrace.", e);
+                if (se.getStackTrace() == null)
+                    throw new AssertionError("Exception has no stacktrace.", se);
 
                 return;
             }
@@ -140,6 +142,22 @@ public class ExceptionGenerationApplication extends IgniteAwareApplication {
         }
 
         throw new AssertionError("Exception has not been thrown.");
+    }
+
+    /** */
+    private Throwable getCauseForRemoteJobException(Throwable e) {
+        Throwable cause = e;
+        int depth = 0;
+
+        while (cause.getCause() != null && cause instanceof IgniteException && depth < 10
+            && cause.getMessage() != null
+            && cause.getMessage().contains("Remote job threw user exception")) {
+            cause = cause.getCause();
+
+            depth++;
+        }
+
+        return cause;
     }
 
     /** Custom {@link Externalizable} Exception */
@@ -241,5 +259,3 @@ public class ExceptionGenerationApplication extends IgniteAwareApplication {
         }
     }
 }
-
-
