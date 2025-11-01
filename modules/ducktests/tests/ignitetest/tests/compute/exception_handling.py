@@ -18,8 +18,10 @@ Module contains client custom exception handling test
 """
 from ignitetest.services.ignite import IgniteService
 from ignitetest.services.ignite_app import IgniteApplicationService
+from ignitetest.services.utils.control_utility import ControlUtility
 from ignitetest.services.utils.ignite_configuration import IgniteConfiguration
 from ignitetest.services.utils.ignite_configuration.discovery import from_ignite_cluster
+from ignitetest.tests.client_test import check_topology
 from ignitetest.tests.rebalance.util import NUM_NODES
 from ignitetest.tests.thin_client_query_test import return_spec_without_ducktests
 from ignitetest.utils import cluster, ignite_versions
@@ -51,7 +53,9 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
 
         ignites.start()
 
-        self.check_topology(ignites, nodes_count)
+        control_sh = ControlUtility(cluster=ignites)
+
+        check_topology(control_sh, nodes_count)
 
         app = IgniteApplicationService(
             self.test_context,
@@ -62,4 +66,4 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
 
         app.await_stopped()
 
-        self.check_topology(ignites, nodes_count + 2)
+        check_topology(control_sh, nodes_count + 2)
