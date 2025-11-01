@@ -61,7 +61,7 @@ class CustomComputeExceptionHandlingTest(IgniteTest):
         app = IgniteApplicationService(
             self.test_context,
             config=ignites.config._replace(client_mode=True, discovery_spi=from_ignite_cluster(ignites)),
-            java_class_name="org.apache.ignite.internal.ducktest.tests.DataGenerationApplication")
+            java_class_name="org.apache.ignite.internal.ducktest.tests.compute.ExceptionGenerationApplication")
 
         app.start_async()
 
