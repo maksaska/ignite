@@ -18,7 +18,6 @@
 package org.apache.ignite.p2p;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.net.MalformedURLException;
 import java.net.URL;
 import org.apache.ignite.IgniteCompute;
@@ -53,19 +52,7 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
     private static final String EXT_EX_CLS_NAME = "ExternalizableException";
 
     /** */
-    private static final String EXT_EX_WITH_BROKEN_SERDES_CLS_NAME = "ExternalizableExceptionWithBrokenSerialization";
-
-    /** */
     public static final String EX_MSG = "Message from Exception";
-
-    /** */
-    public static final int EX_CODE = 127;
-
-    /** */
-    public static final String EX_DETAILS = "Details from Exception";
-
-    /** */
-    private static final String EX_BROKEN_SER_MSG = "Exception occurred on serialization step";
 
     /** */
     private static final String EX_REMOTE_JOB_MSG = "Remote job threw user exception";
@@ -125,7 +112,7 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
 
             IgniteCompute compute = cli.compute(cli.cluster().forRemotes());
 
-            assertThrows(() -> compute.run((IgniteRunnable)ctor.newInstance()), exClsName);
+            assertThrows(() -> compute.run((IgniteRunnable)ctor.newInstance()));
 
             assertEquals(4, ignite.cluster().topologyVersion());
         }
@@ -161,10 +148,7 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
 
             ComputeTask<Object, Object> task = (ComputeTask<Object, Object>)ctor.newInstance(isSerializationBroken);
 
-            if (isSerializationBroken)
-                compute.execute(task, null);
-            else
-                assertThrows(() -> compute.execute(task, null), EXT_EX_WITH_BROKEN_SERDES_CLS_NAME);
+            assertThrows(() -> compute.execute(task, null));
 
             assertEquals(4, ignite.cluster().topologyVersion());
         }
@@ -175,7 +159,7 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
      *
      * @param run Runnable.
      */
-    private void assertThrows(RunnableX run, String clsName) throws NoSuchFieldException, IllegalAccessException {
+    private void assertThrows(RunnableX run) {
         assert run != null;
 
         try {
@@ -184,22 +168,10 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
         catch (Throwable e) {
             Throwable ex = getCauseForRemoteJobException(e);
 
-            if (clsName.equals(ex.getClass().getSimpleName())) {
-                if (clsName.equals(EXT_EX_WITH_BROKEN_SERDES_CLS_NAME)) {
-                    assertEquals(EX_BROKEN_SER_MSG, ex.getMessage());
+            assertEquals(EX_MSG, ex.getMessage());
+            assertNotNull(ex.getStackTrace());
 
-                    return;
-                }
-
-                assertEquals(EX_MSG, ex.getMessage());
-                assertNotNull(ex.getStackTrace());
-                assertFieldEquals(ex, "code", EX_CODE);
-                assertFieldEquals(ex, "details", EX_DETAILS);
-
-                return;
-            }
-
-            throw new AssertionError("Unexpected exception has been thrown.", e);
+            return;
         }
 
         throw new AssertionError("Exception has not been thrown.");
@@ -220,20 +192,5 @@ public class GridP2PComputeExceptionTest extends GridCommonAbstractTest {
         return (ex.getMessage().contains(EX_REMOTE_JOB_MSG) ||
             ex.getMessage().contains(EX_UNMARSHAL_MSG) ||
             ex.getMessage().contains(EX_DESERIALIZE_MSG));
-    }
-
-    /** */
-    private void assertFieldEquals(
-        Throwable ex,
-        String fieldName,
-        Object expVal
-    ) throws NoSuchFieldException, IllegalAccessException {
-        Class<?> exCls = ex.getClass();
-
-        Field detailsField = exCls.getDeclaredField(fieldName);
-        detailsField.setAccessible(true);
-        Object actVal = detailsField.get(ex);
-
-        assertEquals(expVal, actVal);
     }
 }

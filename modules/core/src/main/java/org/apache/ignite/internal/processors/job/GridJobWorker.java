@@ -506,10 +506,12 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
             job = SecurityUtils.sandboxedProxy(ctx, ComputeJob.class, job);
         }
         catch (IgniteCheckedException e) {
-            if (log.isDebugEnabled())
-                U.error(log, "Failed to initialize job [jobId=" + ses.getJobId() + ", ses=" + ses + ']', e);
+            String msg = "Failed to initialize job [jobId=" + ses.getJobId() + ", ses=" + ses + ']';
 
-            ex = new IgniteException(e);
+            if (log.isDebugEnabled())
+                U.error(log, msg, e);
+
+            ex = new IgniteException(msg);
         }
         catch (Throwable e) {
             ex = handleThrowable(e);
@@ -573,10 +575,11 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                     }
                 }
                 catch (Exception e) {
-                    IgniteException ex = new IgniteException("Failed to lock partitions " +
-                        "[jobId=" + ses.getJobId() + ", ses=" + ses + ']', e);
+                    String msg = "Failed to lock partitions " + "[jobId=" + ses.getJobId() + ", ses=" + ses + ']';
 
-                    U.error(log, "Failed to lock partitions [jobId=" + ses.getJobId() + ", ses=" + ses + ']', e);;
+                    IgniteException ex = new IgniteException(msg);
+
+                    U.error(log, msg, e);
 
                     finishJob(null, ex, true);
 
@@ -673,7 +676,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                             U.error(log, msg, e);
                     }
 
-                    ex = e;
+                    ex = new IgniteException(e.getMessage());
                 }
             }
             // Catch Throwable to protect against bad user code except
@@ -737,19 +740,19 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                 "originating node is still in grid and requested class is in the task class path) [jobId=" +
                 ses.getJobId() + ", ses=" + ses + ']';
 
-            ex = new ComputeUserUndeclaredException(msg, e);
+            ex = new ComputeUserUndeclaredException(msg);
         }
         else if (sysStopping && X.hasCause(e, InterruptedException.class, IgniteInterruptedCheckedException.class)) {
             msg = "Job got interrupted due to system stop (will attempt failover).";
 
-            ex = new ComputeExecutionRejectedException(e);
+            ex = new ComputeExecutionRejectedException(msg);
         }
 
         if (msg == null) {
             msg = "Failed to execute job due to unexpected runtime exception [jobId=" + ses.getJobId() +
                 ", ses=" + ses + ", err=" + e.getMessage() + ']';
 
-            ex = new ComputeUserUndeclaredException(msg, e);
+            ex = new ComputeUserUndeclaredException(msg);
         }
 
         assert msg != null;

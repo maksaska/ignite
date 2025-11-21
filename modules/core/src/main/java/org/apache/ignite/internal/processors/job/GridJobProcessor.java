@@ -1346,7 +1346,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
                     catch (IgniteCheckedException e) {
                         IgniteException ex = new IgniteException("Failed to deserialize task attributes " +
                             "[taskName=" + req.getTaskName() + ", taskClsName=" + req.getTaskClassName() +
-                            ", codeVer=" + req.getUserVersion() + ", taskClsLdr=" + dep.classLoader() + ']', e);
+                            ", codeVer=" + req.getUserVersion() + ", taskClsLdr=" + dep.classLoader() + ']');
 
                         U.error(log, ex.getMessage(), e);
 
@@ -1617,7 +1617,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
             // Even if job was removed from another thread, we need to reject it
             // here since job has never been executed.
             IgniteException e2 = new ComputeExecutionRejectedException("Job has been rejected " +
-                "[jobSes=" + jobWorker.getSession() + ", job=" + jobWorker.getJob() + ']', e);
+                "[jobSes=" + jobWorker.getSession() + ", job=" + jobWorker.getJob() + ']');
 
             if (metricsUpdateFreq > -1L)
                 rejectedJobsCnt.increment();
