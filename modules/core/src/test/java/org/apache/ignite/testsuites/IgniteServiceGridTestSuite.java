@@ -23,8 +23,8 @@ import org.apache.ignite.internal.processors.service.GridServiceClientNodeTest;
 import org.apache.ignite.internal.processors.service.GridServiceClusterReadOnlyModeTest;
 import org.apache.ignite.internal.processors.service.GridServiceContinuousQueryRedeployTest;
 import org.apache.ignite.internal.processors.service.GridServiceDeployClusterReadOnlyModeTest;
+import org.apache.ignite.internal.processors.service.GridServiceDeployWithAnonimousNodeFilterTest;
 import org.apache.ignite.internal.processors.service.GridServiceDeploymentCompoundFutureSelfTest;
-import org.apache.ignite.internal.processors.service.GridServiceDeploymentExceptionPropagationTest;
 import org.apache.ignite.internal.processors.service.GridServiceMetricsTest;
 import org.apache.ignite.internal.processors.service.GridServicePackagePrivateSelfTest;
 import org.apache.ignite.internal.processors.service.GridServiceProcessorBatchDeploySelfTest;
@@ -101,7 +101,7 @@ import org.junit.runners.Suite;
     IgniteServiceDeployment2ClassLoadersDefaultMarshallerTest.class,
     IgniteServiceDeploymentFailureTest.class,
 
-    GridServiceDeploymentExceptionPropagationTest.class,
+    GridServiceDeployWithAnonimousNodeFilterTest.class,
     ServiceDeploymentProcessingOnCoordinatorLeftTest.class,
     ServiceDeploymentProcessingOnCoordinatorFailTest.class,
     ServiceDeploymentProcessingOnNodesLeftTest.class,
