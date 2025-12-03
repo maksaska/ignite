@@ -240,7 +240,7 @@ public class IgniteServiceProcessor extends GridProcessorAdapter implements Igni
     public IgniteServiceProcessor(GridKernalContext ctx) {
         super(ctx);
 
-        marsh = ctx.marshallerContext().jdkMarshaller();
+        marsh = ctx.marshaller();
 
         ctx.systemView().registerView(SVCS_VIEW, SVCS_VIEW_DESC,
             new ServiceViewWalker(),
