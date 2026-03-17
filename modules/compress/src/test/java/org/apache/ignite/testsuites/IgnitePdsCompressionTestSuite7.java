@@ -15,7 +15,7 @@ public class IgnitePdsCompressionTestSuite7 extends AbstractIgnitePdsCompression
         List<Class<?>> suite = new ArrayList<>();
 
         enableCompressionByDefault();
-        IgnitePdsTestSuite2.addRealPageStoreTests2(suite, null);
+        IgnitePdsTestSuite9.addRealPageStoreTests(suite, null);
 
         return suite;
     }

@@ -16,7 +16,7 @@ public class IgnitePdsNativeIoTestSuite4 {
     public static List<Class<?>> suite() {
         List<Class<?>> suite = new ArrayList<>();
 
-        IgnitePdsTestSuite2.addRealPageStoreTests3(suite, null);
+        IgnitePdsTestSuite10.addRealPageStoreTests(suite, null);
 
         return suite;
     }

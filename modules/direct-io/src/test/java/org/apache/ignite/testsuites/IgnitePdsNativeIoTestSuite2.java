@@ -34,7 +34,7 @@ public class IgnitePdsNativeIoTestSuite2 {
     public static List<Class<?>> suite() {
         List<Class<?>> suite = new ArrayList<>();
 
-        IgnitePdsTestSuite2.addRealPageStoreTests1(suite, null);
+        IgnitePdsTestSuite2.addRealPageStoreTests(suite, null);
 
         // Direct IO + Page compression.
         suite.add(DiskPageCompressionIntegrationDirectIOTest.class);

@@ -111,9 +111,7 @@ public class IgnitePdsTestSuite2 {
     public static List<Class<?>> suite(Collection<Class> ignoredTests) {
         List<Class<?>> suite = new ArrayList<>();
 
-        addRealPageStoreTests1(suite, ignoredTests);
-        addRealPageStoreTests2(suite, ignoredTests);
-        addRealPageStoreTests3(suite, ignoredTests);
+        addRealPageStoreTests(suite, ignoredTests);
 
         return suite;
     }
@@ -126,7 +124,7 @@ public class IgnitePdsTestSuite2 {
      * @param suite suite to add tests into.
      * @param ignoredTests Ignored tests.
      */
-    public static void addRealPageStoreTests1(List<Class<?>> suite, Collection<Class> ignoredTests) {
+    public static void addRealPageStoreTests(List<Class<?>> suite, Collection<Class> ignoredTests) {
         GridTestUtils.addTestIfNeeded(suite, CdcCacheConfigOnRestartTest.class, ignoredTests);
         GridTestUtils.addTestIfNeeded(suite, CdcNonDefaultWorkDirTest.class, ignoredTests);
         GridTestUtils.addTestIfNeeded(suite, CdcPushMetricsExporterTest.class, ignoredTests);
@@ -145,65 +143,5 @@ public class IgnitePdsTestSuite2 {
         GridTestUtils.addTestIfNeeded(suite, SlowHistoricalRebalanceSmallHistoryTest.class, ignoredTests);
         GridTestUtils.addTestIfNeeded(suite, WALPreloadingWithCompactionTest.class, ignoredTests);
         GridTestUtils.addTestIfNeeded(suite, WalCompactionTest.class, ignoredTests);
-    }
-
-    /** */
-    public static void addRealPageStoreTests2(List<Class<?>> suite, Collection<Class> ignoredTests) {
-        GridTestUtils.addTestIfNeeded(suite, CdcIgniteNodeActiveModeTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CorruptedCdcConsumerStateTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, FreeListCachingTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, HistoricalRebalanceHeuristicsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, HistoricalRebalanceTwoPartsInDifferentCheckpointsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsReserveWalSegmentsWithCompactionTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalFlushFailoverTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalFlushLogOnlySelfTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalFlushLogOnlyWithMmapBufferSelfTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalIteratorSwitchSegmentTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, LightweightCheckpointTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, TransformedCdcSelfTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalCompactionNoArchiverTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalCompactionSwitchOnTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalDeletionArchiveLogOnlyTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalPreloadingConcurrentTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalRolloverOnStopTest.class, ignoredTests);
-    }
-
-    /** */
-    public static void addRealPageStoreTests3(List<Class<?>> suite, Collection<Class> ignoredTests) {
-        GridTestUtils.addTestIfNeeded(suite, CdcCacheVersionTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CdcManagerTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CheckpointFailBeforeWriteMarkTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CheckpointFreeListTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CheckpointStartLoggingTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, CheckpointTimeoutLockTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, FullHistRebalanceOnClientStopTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, HistoricalRebalanceCheckpointTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteDataStorageMetricsSelfTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteLocalWalSizeTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteNodeStoppedDuringDisableWALTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsExchangeDuringCheckpointTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsPageSizesTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsPartitionsStateRecoveryTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsRebalancingOnNotStableTopologyTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsReserveWalSegmentsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePdsWholeClusterRestartTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgnitePersistentStoreDataStructuresTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteRebalanceScheduleResendPartitionsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteShutdownOnSupplyMessageFailureTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteUidAsConsistentIdMigrationTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWALTailIsReachedDuringIterationOverArchiveTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalFlushBackgroundWithMmapBufferSelfTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalFormatFileFailoverTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalHistoryReservationsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalReaderTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalRecoverySeveralRestartsTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalReplayingAfterRestartTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, IgniteWalSerializerVersionTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, StandaloneWalRecordsIteratorTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalDeletionArchiveFsyncTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalForCdcTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalRolloverTypesTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WalScannerTest.class, ignoredTests);
-        GridTestUtils.addTestIfNeeded(suite, WriteAheadLogManagerSelfTest.class, ignoredTests);
     }
 }

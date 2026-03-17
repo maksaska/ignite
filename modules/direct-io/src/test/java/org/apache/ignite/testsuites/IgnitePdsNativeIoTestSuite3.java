@@ -18,7 +18,7 @@ public class IgnitePdsNativeIoTestSuite3 {
     public static List<Class<?>> suite() {
         List<Class<?>> suite = new ArrayList<>();
 
-        IgnitePdsTestSuite2.addRealPageStoreTests2(suite, null);
+        IgnitePdsTestSuite9.addRealPageStoreTests(suite, null);
 
         //Integrity test with reduced count of pages.
         suite.add(IgniteNativeIoPdsRecoveryAfterFileCorruptionTest.class);
