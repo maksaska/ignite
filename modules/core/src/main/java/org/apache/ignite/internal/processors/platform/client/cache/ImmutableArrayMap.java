@@ -20,6 +20,7 @@ package org.apache.ignite.internal.processors.platform.client.cache;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,7 +62,7 @@ public class ImmutableArrayMap<K, V> implements Map<K, V>, Serializable {
         assert keysArr.length == valuesArr.length : "Arrays should be equal in size!";
 
         this.keys = new ImmutableArraySet<>(keysArr);
-        this.values = Arrays.asList(valuesArr);
+        this.values = Collections.unmodifiableList(Arrays.asList(valuesArr));
     }
 
     /** {@inheritDoc} */
