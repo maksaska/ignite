@@ -760,7 +760,7 @@ public class FunctionalTest extends AbstractBinaryArraysTest {
                     }
                 }
                 catch (ClientException e) {
-                    assertFalse(e.getCause().getMessage().contains("Thread already has started a transaction"));
+                    assertTrue(e.getCause().getMessage().contains("timed out"));
                 }
             }
         }
