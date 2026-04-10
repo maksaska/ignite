@@ -760,7 +760,10 @@ public class FunctionalTest extends AbstractBinaryArraysTest {
                     }
                 }
                 catch (ClientException e) {
-                    assertTrue(e.getCause().getMessage().contains("timed out"));
+                    assertTrue(
+                        "Wrong exception: " + e.getMessage(),
+                        e.getCause().getMessage().contains("timed out")
+                    );
                 }
             }
         }
