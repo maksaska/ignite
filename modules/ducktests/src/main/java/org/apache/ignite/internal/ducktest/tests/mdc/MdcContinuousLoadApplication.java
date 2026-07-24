@@ -78,6 +78,9 @@ public class MdcContinuousLoadApplication extends MdcCacheAwareApplication {
     /** */
     public static final TransactionIsolation DFLT_TX_ISOLATION = REPEATABLE_READ;
 
+    /** */
+    public static final int DFLT_TX_TIMEOUT = 1_000;
+
     /** Cache for the cache API modes ({@code null} in SQL modes). */
     private IgniteCache<Integer, IndexedDataRecord> cache;
 
@@ -98,6 +101,9 @@ public class MdcContinuousLoadApplication extends MdcCacheAwareApplication {
 
     /** */
     private TransactionIsolation txIsolation;
+
+    /** */
+    private int txTimeout;
 
     /** {@inheritDoc} */
     @Override public void run(JsonNode jNode) throws Exception {
@@ -120,6 +126,7 @@ public class MdcContinuousLoadApplication extends MdcCacheAwareApplication {
 
         txConcurrency = getEnum(jNode, "txConcurrency", DFLT_TX_CONCURRENCY);
         txIsolation = getEnum(jNode, "txIsolation", DFLT_TX_ISOLATION);
+        txTimeout = jNode.path("txTimeout").asInt(DFLT_TX_TIMEOUT);
 
         markInitialized();
         waitForActivation();
@@ -260,7 +267,7 @@ public class MdcContinuousLoadApplication extends MdcCacheAwareApplication {
                 IndexedDataRecord val = new IndexedDataRecord(key);
 
                 timed(stats, () -> {
-                    try (Transaction tx = ignite.transactions().txStart(txConcurrency, txIsolation)) {
+                    try (Transaction tx = ignite.transactions().txStart(txConcurrency, txIsolation, txTimeout, 1)) {
                         cache.put(key, val);
 
                         tx.commit();

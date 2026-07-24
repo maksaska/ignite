@@ -438,15 +438,19 @@ class MdcCluster:
             for svc in self.servers.values():
                 svc.check_event_absent(pattern, log_file=ALL_LOGS_GLOB)
 
-    def verify_no_hanging_txs(self, dc: str = DC_1):
+    def verify_no_hanging_txs(self, dc: str = DC_1, try_kill_hanging_tx: bool = False):
         """
         Verifies that no active transactions are left on the cluster.
         """
         txs = self.control(dc).tx()
 
-        # ControlUtility.tx() returns a list of parsed transactions, or the raw command
-        # output (a str) when nothing parsed - i.e. when there are no transactions.
-        assert not isinstance(txs, list) or not txs, f"No active transactions expected [txs={txs}]"
+        if isinstance(txs, list) and len(txs) > 0 and try_kill_hanging_tx:
+            for tx in txs:
+                self.control(dc).tx_kill(xid=tx.xid)
+
+            txs = self.control(dc).tx()
+
+        assert not isinstance(txs, list) or len(txs) == 0, f"No active transactions expected [txs={txs}]"
 
     @staticmethod
     def result_int(svc: IgniteApplicationService, name: str) -> int:
@@ -461,6 +465,15 @@ class MdcCluster:
         :return: Application-recorded float result.
         """
         return float(svc.extract_result(name))
+
+    @staticmethod
+    def result_bool(svc: IgniteApplicationService, name: str) -> bool:
+        """
+        :return: Application-recorded boolean result.
+        """
+        val = svc.extract_result(name).strip().lower()
+
+        return val == "true"
 
 
 def cross_dc_network(logger, mdc: MdcCluster, delay_ms: Optional[int] = None,

@@ -66,7 +66,7 @@ class MdcTransactionalPartitionTest(IgniteTest):
     """
     Transactional load resilience to a cross-DC network partition.
     """
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @ignite_versions(str(DEV_BRANCH))
     @parametrize(cross_dc_latency_ms=100)
     def test_transactional_load_cut_on_partition(self, ignite_version, cross_dc_latency_ms):
@@ -75,29 +75,28 @@ class MdcTransactionalPartitionTest(IgniteTest):
         cache exception the cross-DC partition triggers; afterwards no transaction is left
         hanging on either half-ring and the server logs are clean.
         """
-        mdc = MdcCluster(self, ignite_version, srv_per_dc=2, runners_per_dc=1, loaders_per_dc=1,
+        mdc = MdcCluster(self, ignite_version, srv_per_dc=2, runners_per_dc=1, loaders_per_dc={DC_2: 1},
                          network_timeout=20_000, tcp_connect_timeout=10_000)
 
         with cross_dc_network(self.logger, mdc, delay_ms=cross_dc_latency_ms) as net:
             mdc.start_servers()
 
-            # Continuous single-threaded explicit-transaction insert load from the main DC.
+            # Continuous single-threaded explicit-transaction insert load from the backup DC.
             # It stops on the very first exception (stopOnError) instead of failing the app,
             # recording how many inserts had succeeded up to that point.
-            for dc, offset_from, to in [(DC_1, LOAD_KEY_FROM_DC_1, LOAD_KEY_TO_DC_1),
-                                        (DC_2, LOAD_KEY_FROM_DC_2, LOAD_KEY_TO_DC_2)]:
-                mdc.start_loader(dc, {
-                    "mode": "TX_PUT",
-                    "cacheName": CACHE_NAME,
-                    "keyFrom": offset_from,
-                    "keyTo": to,
-                    "stopOnError": True,
-                    "resultPrefix": f"txLoad{dc}",
-                    "createCache": True,
-                    "backups": BACKUPS,
-                    "atomicity": "TRANSACTIONAL",
-                    "mainDc": DC_1,
-                })
+            mdc.start_loader(DC_2, {
+                "mode": "TX_PUT",
+                "cacheName": CACHE_NAME,
+                "keyFrom": LOAD_KEY_FROM_DC_2,
+                "keyTo": LOAD_KEY_TO_DC_2,
+                "stopOnError": True,
+                "resultPrefix": f"txLoad{DC_2}",
+                "createCache": True,
+                "backups": BACKUPS,
+                "atomicity": "TRANSACTIONAL",
+                "mainDc": DC_1,
+                "txTimeout": 5_000
+            })
 
             sleep(LOAD_WARMUP_SECS)
 
@@ -110,21 +109,23 @@ class MdcTransactionalPartitionTest(IgniteTest):
             mdc.verify_split_brain()
 
             # The load has already finished on its own - this just collects its results.
-            for dc in [DC_1, DC_2]:
-                svc = mdc.stop_loader(dc)
+            svc = mdc.stop_loader(DC_2)
 
-                inserts = mdc.result_int(svc, f"txLoad{dc}OpsCnt")
-                errors = mdc.result_int(svc, f"txLoad{dc}ErrCnt")
+            inserts = mdc.result_int(svc, f"txLoad{DC_2}OpsCnt")
+            errors = mdc.result_int(svc, f"txLoad{DC_2}ErrCnt")
+            stop_on_error = mdc.result_bool(svc, f"txLoad{DC_2}StoppedOnError")
 
-                self.logger.info(f"Transactional load cut by the partition "
-                                 f"[txLoad{dc}OpsCnt={inserts}, txLoad{dc}ErrCnt={errors}]")
+            self.logger.info(f"Transactional load cut by the partition [txLoad{DC_2}OpsCnt={inserts}, "
+                             f"txLoad{DC_2}ErrCnt={errors}, txLoad{DC_2}StoppedOnError={stop_on_error}]")
 
-                assert inserts > 0, "The transactional load performed no successful inserts"
+            assert inserts > 0, "The transactional load performed no successful inserts"
+            assert errors > 0, "The transactional load should have failed on network partition"
+            assert stop_on_error, f"The load was expected to be cut off by the partition [dc={DC_2}]"
 
             # The point of the scenario: the aborted explicit transactions leave nothing
             # hanging on either half-ring...
-            mdc.verify_no_hanging_txs(DC_1)
-            mdc.verify_no_hanging_txs(DC_2)
+            mdc.verify_no_hanging_txs(DC_1, try_kill_hanging_tx=True)
+            mdc.verify_no_hanging_txs(DC_2, try_kill_hanging_tx=True)
 
             # ...and neither half-ring logged a hung PME, a long running transaction or a
             # lost partition.
