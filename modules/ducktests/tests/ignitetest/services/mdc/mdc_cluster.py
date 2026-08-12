@@ -310,7 +310,7 @@ class MdcCluster:
         """
         lines = ["DATA CENTERS"]
 
-        for dc in DCS:
+        for dc in self.dcs:
             roles = [(label, [node.account.hostname for svc in services for node in svc.nodes])
                      for label, services in (("server", [self.servers[dc]] if dc in self.servers else []),
                                              ("runner", self.runners.get(dc, [])),
