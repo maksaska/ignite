@@ -140,8 +140,20 @@ def isolation_pairs(dc: str, dcs: Sequence[str]) -> List[Tuple[str, str]]:
 def _per_dc(value: Union[int, Dict[str, int]], dcs: Sequence[str]) -> Dict[str, int]:
     """
     Normalizes an int-or-dict per-DC count into a dict, e.g. 3 -> {DC1: 3, DC2: 3}.
+
+    A dict naming a DC the cluster does not span is rejected here rather than left to fail
+    later: such a DC is skipped by :meth:`MdcCluster.network_registry`, so its nodes would
+    run with no impairments and no partition rules while every other call site kept working.
     """
-    return dict(value) if isinstance(value, dict) else {dc: value for dc in dcs}
+    if not isinstance(value, dict):
+        return {dc: value for dc in dcs}
+
+    unknown = sorted(dc for dc in value if dc not in dcs)
+
+    assert not unknown, \
+        f"Per-DC counts name data centers the cluster does not span [unknown={unknown}, dcs={list(dcs)}]"
+
+    return dict(value)
 
 
 def _as_segment(segment: Segment) -> Tuple[str, ...]:
@@ -149,6 +161,14 @@ def _as_segment(segment: Segment) -> Tuple[str, ...]:
     Normalizes a single DC name or a collection of DC names into a tuple of DC names.
     """
     return (segment,) if isinstance(segment, str) else tuple(segment)
+
+
+def _fmt_segment(segment: Tuple[str, ...]) -> str:
+    """
+    :return: Segment rendered for an assertion message, e.g. "DC1+DC2" - a Python tuple
+             reads poorly in the middle of one, and a single DC renders as itself.
+    """
+    return "+".join(segment)
 
 
 class MdcCluster:
@@ -378,7 +398,7 @@ class MdcCluster:
         if java_class is not None:
             svc.java_class_name = java_class
 
-        svc.params = self._with_topology_params(params)
+        svc.params = self._with_cache_params(params)
 
         svc.start(clean=self._first_start(svc))
         svc.wait()
@@ -390,13 +410,14 @@ class MdcCluster:
                      java_class: str = LOAD_APP) -> IgniteApplicationService:
         """
         Starts a background load application (runs until stopped). Any exception raised
-        by the application surfaces in :meth:`stop_loader`. :attr:`cache_defaults` are
-        merged in.
+        by the application surfaces in :meth:`stop_loader`. A load that creates the cache
+        (``createCache``) has the MDC cache parameters injected - see
+        :meth:`_with_cache_params`.
         """
         svc = self.loaders[dc][loader]
 
         svc.java_class_name = java_class
-        svc.params = self._with_topology_params({**self.cache_defaults, **params})
+        svc.params = self._with_cache_params(params)
 
         svc.start(clean=self._first_start(svc))
 
@@ -413,16 +434,23 @@ class MdcCluster:
 
         return svc
 
-    def _with_topology_params(self, params: dict) -> dict:
+    def _with_cache_params(self, params: dict, creates_cache: bool = False) -> dict:
         """
-        Injects this cluster's topology parameters into the parameters of an application
-        that creates the MDC cache, so no call site can configure a validator or a backup
-        filter that disagrees with the DC set. Explicit parameters still win.
+        Injects everything the MDC cache is configured from - the topology validator mode,
+        the DC count the affinity backup filter needs, and :attr:`cache_defaults` - into
+        the parameters of an application that creates it, so no call site can configure a
+        cache that disagrees with the DC set. Explicit parameters still win.
+
+        The single injection point for all of it: an application that does not create the
+        cache is handed none of it, since it would only ever be ignored.
+
+        :param creates_cache: Whether the application always creates the cache. The ones
+               that decide at run time say so with a ``createCache`` parameter instead.
         """
-        if not params.get("createCache"):
+        if not (creates_cache or params.get("createCache")):
             return params
 
-        return {**self.topology_params(), **params}
+        return {**self.topology_params(), **self.cache_defaults, **params}
 
     def _first_start(self, svc) -> bool:
         first = id(svc) not in self._started_apps
@@ -437,18 +465,19 @@ class MdcCluster:
         Creates the MDC cache (if absent) and populates keys ``[from_idx, to_idx)``.
         Extra cache parameters (``atomicity``, ``writeSync``, ``readFromBackup``,
         ``partitions``, ...) are passed through to the cache configuration builder, on top
-        of :attr:`cache_defaults`.
+        of the MDC cache parameters - see :meth:`_with_cache_params`.
 
         :param backups: Backup count, by default the smallest one that gives every DC a
                single copy of every partition (see :attr:`min_backups`).
         """
-        params = {**self.topology_params(),
-                  "cacheName": cache_name,
+        params = {"cacheName": cache_name,
                   "backups": self.min_backups if backups is None else backups,
                   "from": from_idx, "to": to_idx, "sqlMode": sql_mode,
-                  **self.cache_defaults, **cache_params}
+                  **cache_params}
 
-        return self.run_app(dc, GENERATOR_APP, params)
+        # The generator always creates the cache, so it carries no createCache parameter
+        # for _with_cache_params() to key off.
+        return self.run_app(dc, GENERATOR_APP, self._with_cache_params(params, creates_cache=True))
 
     def check_data(self, dc: str, cache_name: str, from_idx: int, to_idx: int) -> Optional[IgniteApplicationService]:
         """
@@ -487,10 +516,10 @@ class MdcCluster:
         """
         Runs a load burst (see ``MdcContinuousLoadApplication``) and returns the service.
         ``result_prefix`` must be unique per burst because runner services are reused.
-        :attr:`cache_defaults` are merged in.
+        A burst that creates the cache (``createCache``) has the MDC cache parameters
+        injected - see :meth:`_with_cache_params`.
         """
-        load_params = {"mode": mode, "cacheName": cache_name, "resultPrefix": result_prefix,
-                       **self.cache_defaults, **params}
+        load_params = {"mode": mode, "cacheName": cache_name, "resultPrefix": result_prefix, **params}
 
         return self.run_app(dc, LOAD_APP, load_params, runner=runner)
 
@@ -533,10 +562,10 @@ class MdcCluster:
         """
         normalized = [_as_segment(segment) for segment in segments]
 
-        for segment in normalized:
-            self.verify_segment_healthy(segment)
-
-        states = {segment: self.control(segment[0]).cluster_state() for segment in normalized}
+        # The state each segment is checked healthy against is the same one its baseline and
+        # coordinator are read from: a partitioned segment answers control.sh over the very
+        # links the test just cut, so it is fetched once per segment and passed around.
+        states = {segment: self.verify_segment_healthy(segment) for segment in normalized}
 
         baselines = {segment: {node.consistent_id for node in states[segment].baseline} for segment in normalized}
 
@@ -545,20 +574,22 @@ class MdcCluster:
 
             assert not common_nodes, \
                 f"Segment baselines should not intersect [common={sorted(common_nodes)}, " \
-                f"{seg_a}={sorted(baselines[seg_a])}, {seg_b}={sorted(baselines[seg_b])}]"
+                f"{_fmt_segment(seg_a)}={sorted(baselines[seg_a])}, " \
+                f"{_fmt_segment(seg_b)}={sorted(baselines[seg_b])}]"
 
         coordinators = {}
 
         for segment in normalized:
             coordinator = states[segment].coordinator
 
-            assert coordinator, f"Coordinator is not found in the {segment} segment baseline output!"
+            assert coordinator, \
+                f"Coordinator is not found in the {_fmt_segment(segment)} segment baseline output!"
 
             assert coordinator.consistent_id in baselines[segment], \
-                f"{segment} coordinator should belong to its own segment baseline " \
+                f"{_fmt_segment(segment)} coordinator should belong to its own segment baseline " \
                 f"[coordinator={coordinator.consistent_id}, baseline={sorted(baselines[segment])}]"
 
-            coordinators[segment] = coordinator.consistent_id
+            coordinators[_fmt_segment(segment)] = coordinator.consistent_id
 
         assert len(set(coordinators.values())) == len(normalized), \
             f"Every segment should have elected its own coordinator [coordinators={coordinators}]"
@@ -567,23 +598,31 @@ class MdcCluster:
         """
         Verifies that a segment is fully alive, ACTIVE, and its baseline covers exactly
         the servers of the DCs it consists of - and nothing else.
+
+        :return: The ClusterState the segment was verified against, so that a caller
+                 asserting further on it (see :meth:`verify_segments`) needs no second
+                 control.sh round-trip into a segment that may be cut off.
         """
         dcs = _as_segment(segment)
+
+        name = _fmt_segment(dcs)
 
         exp_alive_nodes = sum(self.srv_per_dc[dc] for dc in dcs)
         act_alive_nodes = sum(len(self.servers[dc].alive_nodes) for dc in dcs)
 
         assert act_alive_nodes == exp_alive_nodes, \
-            f"{exp_alive_nodes} nodes should be alive in {dcs}! [actual={act_alive_nodes}]"
+            f"{exp_alive_nodes} nodes should be alive in {name}! [actual={act_alive_nodes}]"
 
         cluster_state = self.control(dcs[0]).cluster_state()
 
         assert "ACTIVE" == cluster_state.state, \
-            f"{dcs} segment state should remain ACTIVE [actual={cluster_state.state}]"
+            f"{name} segment state should remain ACTIVE [actual={cluster_state.state}]"
 
         assert len(cluster_state.baseline) == exp_alive_nodes, \
-            f"{dcs} segment baseline is not expected " \
+            f"{name} segment baseline is not expected " \
             f"[exp={exp_alive_nodes}, actual_baseline={cluster_state.baseline}]"
+
+        return cluster_state
 
     def verify_whole_cluster_healthy(self):
         """

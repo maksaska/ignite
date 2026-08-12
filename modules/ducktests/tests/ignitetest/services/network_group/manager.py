@@ -44,7 +44,7 @@ ACTION_DEPLOY = "deploy"
 MAX_PARALLEL_SSH_SESSIONS = 16
 
 # Separates the qdisc, filter and iptables sections in the output of the batched
-# network probe issued by _log_network.
+# network probe issued by _probe_network.
 PROBE_SECTION_SEPARATOR = "=== ignitetest network probe section ==="
 
 # A rule spec: (src_group, dst_group, action, config).

@@ -24,7 +24,7 @@ to cut. All of that is compiled without a cluster, so it is checked without one.
 import pytest
 
 from ignitetest.services.mdc.mdc_cluster import mdc_topology_params, min_backups, all_pairs, isolation_pairs, \
-    cross_dc_network, DCS_2, DCS_3, DC_1, DC_2, DC_3
+    cross_dc_network, _per_dc, DCS_2, DCS_3, DC_1, DC_2, DC_3
 
 DELAY_MS = 100
 
@@ -109,3 +109,25 @@ class CheckMdcNetworkLayout:
         net = cross_dc_network(None, FakeMdcCluster(DCS_3))
 
         assert net.network_group_store.matrix == {}
+
+
+class CheckMdcPerDcCounts:
+    """
+    Checks how the per-DC service counts are spread over the DC set.
+    """
+    def check_a_scalar_count_covers_every_dc(self):
+        """One number means that number of nodes in every DC the cluster spans."""
+        assert _per_dc(2, DCS_3) == {DC_1: 2, DC_2: 2, DC_3: 2}
+
+    def check_a_dict_count_is_taken_as_is(self):
+        """An asymmetric layout names only the DCs it populates."""
+        assert _per_dc({DC_1: 3}, DCS_3) == {DC_1: 3}
+
+    def check_a_dict_naming_a_foreign_dc_is_rejected(self):
+        """
+        A DC outside the cluster's own set is skipped by network_registry(), so its nodes
+        would run with no impairments and no partition rules - and nothing else would say
+        so. It has to fail where it is declared.
+        """
+        with pytest.raises(AssertionError, match=DC_3):
+            _per_dc({DC_1: 1, DC_3: 1}, DCS_2)
