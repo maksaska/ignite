@@ -284,6 +284,30 @@ A held test reports nothing back to ducktape, which kills a session it has heard
 | **demo_pause_timeout_sec** | How long one breakpoint may hold the scenario before it resumes on its own. Default is 600, and it is capped by what is left of `--test-runner-timeout`. | ```{"demo_pause_timeout_sec": 1800}``` |
 | **demo_pause_dir** | Control directory shared with the host. Default is `<repository root>/.ducktests-demo`. | ```{"demo_pause_dir": "/opt/ignite-dev/.demo"}``` |
 
+#### MDC Demonstration Scenarios
+
+`ignitetest/tests/mdc/demo/` holds scenarios written to be *shown*, not to cover: each one demonstrates a single property of the MDC support with little data, few nodes and breakpoints at the moments worth looking at. The rigorous coverage of the same features lives in `ignitetest/tests/mdc/`. The demos are not part of any suite - run them one at a time:
+
+```bash
+./docker/run_tests.sh -n 8 -gj '{"demo_pause": "*"}' \
+  -t ./ignitetest/tests/mdc/demo/main_dc_switch_demo.py::MdcMainDcSwitchDemo.demo_promote_a_dc_when_no_majority_is_left
+```
+
+| Scenario | Nodes | What it shows | Breakpoints |
+|----------|-------|---------------|-------------|
+| `backup_filter_demo.demo_backup_filter_puts_a_copy_in_every_dc` | 7 | `MdcAffinityBackupFilter` gives every DC exactly one copy of every partition, confirmed by the `IsCacheAffinityConfigurationMdcSafe` / `IsCachePartitionDistributionSafe` metrics | `data-loaded`, `distribution` |
+| `backup_filter_demo.demo_without_the_backup_filter_the_guarantee_is_lost` | 5 | the same cache without the filter - partitions keeping both copies in one DC, and the cache reporting itself as not MDC safe | `distribution` |
+| `dc_topology_demo.demo_dc_aware_ring_and_node_attributes` | 6 | DC ordered discovery ring via `--data-center print_topology`, DC id in the NODES system view | `dc-topology` |
+| `dc_topology_demo.demo_thin_client_connections_are_reported_per_dc` | 7 | thin client connections grouped by the client's DC | `thin-clients-connected` |
+| `local_dc_access_demo.demo_cache_api_reads_stay_in_the_local_dc` | 6 | Cache API reads served locally, measured against a 100 ms cross-DC delay | `reads-measured` |
+| `local_dc_access_demo.demo_sql_api_reads_stay_in_the_local_dc` | 6 | the same for SQL queries | `reads-measured` |
+| `local_dc_internals_demo.demo_rebalance_pulls_from_the_local_dc` | 5 | a wiped node rebalanced from a supplier in its own DC | `data-loaded`, `rebalanced` |
+| `local_dc_internals_demo.demo_snapshot_restore_in_mdc` | 5 | full snapshot restore into the stretched cluster, cross-DC layout preserved | `data-loaded`, `snapshot-restored` |
+| `recovery_demo.demo_split_brain_and_rejoin` | 6 | two DCs: cut link, active half + read-only half, heal, rejoin by restart | `cluster-up`, `data-loaded`, `split-brain`, `rejoined` |
+| `recovery_demo.demo_promote_the_read_only_half_ring_to_main` | 6 | promoting the reserve half-ring with `--set-main-dc` while the link is down | `split-brain`, `main-dc-reassigned` |
+| `main_dc_switch_demo.demo_minority_dc_goes_read_only_by_default` | 8 | three DCs: the majority keeps writing, the isolated DC goes read-only, no main DC mark | `minority-read-only` |
+| `main_dc_switch_demo.demo_promote_a_dc_when_no_majority_is_left` | 7 | three way split, one DC promoted by hand, and the mark dropped when the others rejoin | `no-majority`, `dc-promoted`, `network-restored` |
+
 ### Security Settings
 ```bash
 # Enable built-in authentication overrides
