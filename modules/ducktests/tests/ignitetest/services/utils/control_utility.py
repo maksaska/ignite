@@ -122,6 +122,22 @@ class ControlUtility:
         """
         return self.__run("--deactivate --yes")
 
+    def set_main_dc(self, new_main_dc):
+        """
+        Reassigns the main data center of the MDC topology validator to the given one, so
+        that a cluster segment which lost the configured main DC (or a majority of the DC
+        set) starts accepting writes again.
+
+        The assignment is dynamic and lives only as long as the segment stays on its own:
+        a server node joining from any other DC proves that DC is alive again and drops it.
+
+        :param new_main_dc: Data center id to become the main one. Only the DC of the
+               segment the command is run against makes sense here - a segment cannot hand
+               write access to a DC it does not see.
+        :return: Output of the command.
+        """
+        return self.__run(f"--set-main-dc --new-main-dc {new_main_dc} --enable-experimental --yes")
+
     def tx(self, **kwargs):
         """
         Get list of transactions, various filters can be applied.

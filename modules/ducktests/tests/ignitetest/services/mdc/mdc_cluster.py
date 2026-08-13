@@ -370,6 +370,31 @@ class MdcCluster:
         for dc in sorted(self.servers):
             self.servers[dc].stop()
 
+    def stop_dcs(self, *dcs: str):
+        """
+        Stops the server services of the given DCs, in the order given - a data center
+        outage, as opposed to the network partition :func:`cross_dc_network` produces.
+        """
+        for dc in dcs:
+            self.servers[dc].stop()
+
+    def start_dcs(self, *dcs: str, clean: bool = False, await_rebalance: bool = True):
+        """
+        Starts the given DCs back, by default preserving their persistence, and waits until
+        the cluster has rebalanced onto them.
+
+        Every DC is started before the first wait, so that their joins are not serialized
+        behind each other's rebalance.
+
+        Restarting the FIRST started DC needs :meth:`sync_service_discovery` beforehand.
+        """
+        for dc in dcs:
+            self.servers[dc].start(clean=clean)
+
+        if await_rebalance:
+            for dc in dcs:
+                self.servers[dc].await_rebalance()
+
     def restart(self, dc: str, clean: bool = False, await_rebalance: bool = True):
         """
         Restarts a whole DC preserving its persistence (the pattern used to rejoin a
@@ -528,6 +553,20 @@ class MdcCluster:
         :return: Control utility bound to the given DC's servers, the first DC by default.
         """
         return ControlUtility(self.servers[dc if dc is not None else self.dcs[0]])
+
+    def set_main_dc(self, dc: str, new_main_dc: Optional[str] = None) -> str:
+        """
+        Dynamically reassigns the main data center from within the given DC, handing write
+        access to ``new_main_dc`` - the DC the command is run on by default, which is the
+        only assignment a lone surviving segment can usefully make.
+
+        See :meth:`ControlUtility.set_main_dc` for the lifetime of the assignment.
+
+        :param dc: DC whose servers the control utility is run against.
+        :param new_main_dc: DC to become the main one, ``dc`` by default.
+        :return: Output of the command.
+        """
+        return self.control(dc).set_main_dc(dc if new_main_dc is None else new_main_dc)
 
     def verify_cache_distribution(self, cache_name: str, copies_per_dc: Optional[int] = None,
                                   dc: Optional[str] = None):
