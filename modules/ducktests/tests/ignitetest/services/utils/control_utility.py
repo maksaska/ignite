@@ -138,6 +138,82 @@ class ControlUtility:
         """
         return self.__run(f"--set-main-dc --new-main-dc {new_main_dc} --enable-experimental --yes")
 
+    def distribution(self, caches=None, baseline=None):
+        """
+        Prints the current partition distribution over the nodes, or the difference between
+        the current distribution and the one a planned baseline would produce.
+
+        :param caches: Cache names to report on, all of them by default.
+        :param baseline: Planned baseline as a list of ``consistentId[:{attr:val,...}]``
+               tokens. Attributes of nodes already in the topology are filled in implicitly;
+               the ones passed here override them. Without it only the current distribution
+               is printed.
+        :return: Output of the command.
+        """
+        cmd = "--distribution"
+
+        if caches:
+            cmd += f" --caches {as_csv(caches)}"
+
+        if baseline:
+            cmd += f" --baseline {as_csv(baseline)}"
+
+        return self.__run(f"{cmd} --enable-experimental")
+
+    def data_center_topology(self, node_format=None):
+        """
+        Prints the MultiDC topology: how nodes are spread over the data centers, how many
+        times the discovery ring crosses a DC boundary (cross-DC ring hops), how the thin
+        client connections are spread over the clients' DCs, and the ring itself.
+
+        The thin client figure counts physical connections, not client instances.
+
+        :param node_format: How nodes are named in the output - CONSISTENT_ID, ID or
+               INSTANCE_NAME. The command's own default is used when omitted.
+        :return: Output of the command.
+        """
+        cmd = "--data-center print_topology"
+
+        if node_format:
+            cmd += f" --node-format {node_format}"
+
+        return self.__run(f"{cmd} --enable-experimental")
+
+    def system_view(self, view_name, node=None):
+        """
+        Prints a system view, e.g. NODES - which carries the data center id of every node
+        among its columns.
+
+        :param view_name: Name of the system view.
+        :param node: Node to run the control utility on.
+        :return: Output of the command.
+        """
+        return self.__run(f"--system-view {view_name}", node=node)
+
+    def destroy_caches(self, cache_names):
+        """
+        Destroys the given caches.
+
+        :param cache_names: Cache names, a string or a collection of them.
+        """
+        return self.__run(f"--cache destroy --caches {as_csv(cache_names)} --yes")
+
+    def snapshot_restore(self, snapshot_name: str, groups=None):
+        """
+        Restores a snapshot synchronously, so that the command returns only once every
+        partition has been restored.
+
+        :param snapshot_name: Name of the snapshot.
+        :param groups: Cache group names to restore, all of them by default.
+        :return: Output of the command.
+        """
+        cmd = f"--snapshot restore {snapshot_name}"
+
+        if groups:
+            cmd += f" --groups {as_csv(groups)}"
+
+        return self.__run(f"{cmd} --sync")
+
     def tx(self, **kwargs):
         """
         Get list of transactions, various filters can be applied.
@@ -683,6 +759,14 @@ class ControlUtilityError(RemoteCommandError):
 
     def __init__(self, account, cmd, exit_status, output):
         super().__init__(account, cmd, exit_status, "".join(output))
+
+
+def as_csv(value):
+    """
+    Renders a string-or-collection command argument as the comma separated list control.sh
+    expects, leaving an already rendered string alone.
+    """
+    return value if isinstance(value, str) else ','.join(value)
 
 
 def parse_dict(raw):

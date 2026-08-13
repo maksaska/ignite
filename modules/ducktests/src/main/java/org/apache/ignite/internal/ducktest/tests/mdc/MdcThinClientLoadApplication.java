@@ -39,8 +39,9 @@ import static org.apache.ignite.internal.ducktest.utils.Utils.timed;
  * delay, DC-local routing yields a small average, cross-DC routing a large one.
  * <p>
  * Parameters: {@code mode} ({@code GET}/{@code PUT}), {@code cacheName}, {@code keyFrom},
- * {@code keyTo}, {@code iterations}, {@code inadmissible} (PUT only),
- * {@code resultPrefix}.
+ * {@code keyTo}, {@code iterations} (default 100; {@code 0} means "run until terminated",
+ * for a client that has to stay connected across a test phase), {@code opPauseMs} (pause
+ * between operations, default 0), {@code inadmissible} (PUT only), {@code resultPrefix}.
  * <p>
  */
 public class MdcThinClientLoadApplication extends IgniteAwareApplication {
@@ -56,6 +57,7 @@ public class MdcThinClientLoadApplication extends IgniteAwareApplication {
         int keyFrom = jNode.path("keyFrom").asInt(0);
         int keyTo = jNode.path("keyTo").asInt(Integer.MAX_VALUE);
         long iterations = jNode.path("iterations").asLong(100);
+        long opPauseMs = jNode.path("opPauseMs").asLong(0);
 
         boolean put = mode == LoadMode.PUT;
         boolean inadmissible = jNode.path("inadmissible").asBoolean(false);
@@ -79,7 +81,8 @@ public class MdcThinClientLoadApplication extends IgniteAwareApplication {
 
         int key0 = keyFrom;
 
-        for (long i = 0; i < iterations && !terminated(); i++) {
+        // iterations == 0 keeps the client running - and connected - until it is terminated.
+        for (long i = 0; (iterations == 0 || i < iterations) && !terminated(); i++) {
             int key = key0;
 
             boolean ok = true;
@@ -120,6 +123,9 @@ public class MdcThinClientLoadApplication extends IgniteAwareApplication {
 
             if (key0 >= keyTo)
                 key0 = keyFrom;
+
+            if (opPauseMs > 0)
+                Thread.sleep(opPauseMs);
         }
 
         long durationMs = System.currentTimeMillis() - startTs;

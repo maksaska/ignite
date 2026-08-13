@@ -57,6 +57,9 @@ import static org.apache.ignite.internal.ducktest.utils.Utils.getEnum;
  *     <li>{@code datacenters} - full DC set for majority-based validation (odd DC count mode),
  *         takes precedence over {@code mainDc};</li>
  *     <li>{@code dcsNum} - number of data centers, default 2;</li>
+ *     <li>{@code backupFilter} - whether to set the {@link MdcAffinityBackupFilter} on the affinity function,
+ *         default {@code true}. Turning it off drops the "one copy of every partition in every DC" guarantee,
+ *         and exists to demonstrate what the filter is responsible for;</li>
  *     <li>{@code cacheMode} - {@link CacheMode}, default {@code PARTITIONED};</li>
  *     <li>{@code atomicity} - {@link CacheAtomicityMode}, default {@code ATOMIC};</li>
  *     <li>{@code writeSync} - {@link CacheWriteSynchronizationMode}, default {@code FULL_SYNC}.
@@ -86,6 +89,9 @@ public abstract class MdcCacheAwareApplication extends IgniteAwareApplication {
 
     /** The cache level topology validator is set unless the parameters say otherwise. */
     protected static final boolean DFLT_CACHE_TOP_VALIDATOR = true;
+
+    /** The MDC affinity backup filter is set unless the parameters say otherwise. */
+    protected static final boolean DFLT_BACKUP_FILTER = true;
 
     /** */
     protected static final CacheAtomicityMode DFLT_ATOMICITY_MODE = ATOMIC;
@@ -134,6 +140,13 @@ public abstract class MdcCacheAwareApplication extends IgniteAwareApplication {
 
         int dcsNum = jNode.path("dcsNum").asInt(DFLT_DCS_NUM);
 
+        RendezvousAffinityFunction affinity = new RendezvousAffinityFunction().setPartitions(partitions);
+
+        if (jNode.path("backupFilter").asBoolean(DFLT_BACKUP_FILTER))
+            affinity.setAffinityBackupFilter(new MdcAffinityBackupFilter(dcsNum, backups));
+        else
+            log.info("MDC affinity backup filter is disabled [cache=" + cacheName + "]");
+
         CacheConfiguration<Integer, V> cacheCfg = new CacheConfiguration<Integer, V>()
             .setName(cacheName)
             .setCacheMode(cacheMode)
@@ -141,9 +154,7 @@ public abstract class MdcCacheAwareApplication extends IgniteAwareApplication {
             .setWriteSynchronizationMode(writeSync)
             .setBackups(backups)
             .setReadFromBackup(readFromBackup)
-            .setAffinity(new RendezvousAffinityFunction()
-                .setPartitions(partitions)
-                .setAffinityBackupFilter(new MdcAffinityBackupFilter(dcsNum, backups)));
+            .setAffinity(affinity);
 
         if (jNode.path("topologyValidator").asBoolean(DFLT_CACHE_TOP_VALIDATOR))
             cacheCfg.setTopologyValidator(mdcTopologyValidator(jNode));

@@ -36,7 +36,9 @@ from ignitetest.services.ignite_app import IgniteApplicationService
 from ignitetest.services.network_group.configuration import NetworkGroupStore, CrossNetworkGroupConfiguration
 from ignitetest.services.network_group.manager import NetworkGroupManager
 from ignitetest.services.utils.control_utility import ControlUtility
-from ignitetest.services.utils.ignite_configuration import IgniteConfiguration, TcpCommunicationSpi
+from ignitetest.services.utils.ignite_configuration import IgniteConfiguration, TcpCommunicationSpi, \
+    DataStorageConfiguration
+from ignitetest.services.utils.ignite_configuration.data_storage import DataRegionConfiguration
 from ignitetest.services.utils.ignite_configuration.discovery import TcpDiscoverySpi, from_ignite_cluster, \
     from_ignite_services
 from ignitetest.services.utils.ssl.client_connector_configuration import ClientConnectorConfiguration
@@ -77,6 +79,26 @@ ASSERTION_ERROR_PATTERN = "AssertionError"
 
 # Every log of a server node, including the ones rotated by a restart.
 ALL_LOGS_GLOB = "ignite*.log*"
+
+# Needed by everything that reads a node metric over JMX - await_rebalance(), the snapshot
+# commands and the MDC safety metrics below among them.
+JMX_METRIC_EXPORTER = "org.apache.ignite.spi.metric.jmx.JmxMetricExporterSpi"
+
+# Per-cache metrics holding the cluster's own verdict on the MDC guarantees. Registered on
+# every server node that carries a DC id, for every cache.
+#
+# The two are not the same statement. The affinity one is about CONFIGURATION - whether the
+# cache is set up to keep a copy of every partition in every DC at all, which is what the
+# MdcAffinityBackupFilter provides. The distribution one is about the CURRENT assignment
+# actually doing so, which a correctly configured cache still fails while some DC has no
+# nodes to place a copy on.
+MDC_SAFE_AFFINITY_METRIC = "IsCacheAffinityConfigurationMdcSafe"
+MDC_SAFE_DISTRIBUTION_METRIC = "IsCachePartitionDistributionSafe"
+
+# The record a rebalancing node logs per cache group, naming the node it pulls the partitions
+# from: "Starting rebalance routine [<grp>, topVer=..., supplier=<nodeId>, fullPartitions=...".
+# The supplier is the only field of interest, and it never contains a comma.
+REBALANCE_SUPPLIER_PATTERN = "supplier=[^,]*"
 
 # A segment of a partitioned cluster: one DC or a group of DCs that still see each other.
 Segment = Union[str, Sequence[str]]
@@ -194,6 +216,8 @@ class MdcCluster:
                  runners_per_dc: Union[int, Dict[str, int]] = 1,
                  loaders_per_dc: Union[int, Dict[str, int]] = 0,
                  client_connector: bool = False,
+                 persistent: bool = False,
+                 jmx_metrics: bool = False,
                  network_timeout: int = 5_000,
                  tcp_connect_timeout: int = 5_000):
         self.test_context = test.test_context
@@ -220,6 +244,16 @@ class MdcCluster:
 
         if client_connector:
             cfg_kwargs["client_connector_configuration"] = ClientConnectorConfiguration()
+
+        if persistent:
+            cfg_kwargs["data_storage"] = DataStorageConfiguration(
+                default=DataRegionConfiguration(persistence_enabled=True))
+
+        if jmx_metrics:
+            # A fresh set, never the shared mutable default of IgniteConfiguration.
+            cfg_kwargs["metric_exporters"] = {JMX_METRIC_EXPORTER}
+
+        self.persistent = persistent
 
         self.ignite_config = IgniteConfiguration(**cfg_kwargs)
 
@@ -356,12 +390,19 @@ class MdcCluster:
         return [f"{node.account.hostname}:{port}"
                 for dc in sorted(self.servers) for node in self.servers[dc].nodes]
 
-    def start_servers(self):
+    def start_servers(self, activate: Optional[bool] = None):
         """
         Starts all server services.
+
+        :param activate: Whether to activate the cluster afterwards. By default a persistent
+               cluster is activated (it comes up INACTIVE) and an in-memory one is not (it
+               comes up ACTIVE already).
         """
         for dc in sorted(self.servers):
             self.servers[dc].start()
+
+        if activate or (activate is None and self.persistent):
+            self.control().activate()
 
     def stop_servers(self):
         """
@@ -567,6 +608,72 @@ class MdcCluster:
         :return: Output of the command.
         """
         return self.control(dc).set_main_dc(dc if new_main_dc is None else new_main_dc)
+
+    def node_dcs(self) -> Dict[str, str]:
+        """
+        :return: Node id (as the node logs it about itself) -> DC the node belongs to, for
+                 every alive server node. Costs an SSH round-trip per node, so the result is
+                 worth reusing - it is what turns a node id printed by the cluster (a
+                 rebalance supplier, a baseline entry) into the DC it sits in.
+        """
+        return {svc.node_id(node).lower(): dc
+                for dc, svc in self.servers.items() for node in svc.alive_nodes}
+
+    def rebalance_suppliers(self, dc: str, node) -> List[str]:
+        """
+        :param dc: DC the node belongs to.
+        :param node: Server node that has rebalanced.
+        :return: Ids of the nodes the given node pulled partitions from, read out of its own
+                 log. Empty when the node rebalanced nothing.
+        """
+        out = self.servers[dc].exec_command(
+            node, f"grep -o '{REBALANCE_SUPPLIER_PATTERN}' {node.log_file} || true")
+
+        return sorted({line.split("=", 1)[1].strip().lower() for line in out.splitlines() if "=" in line})
+
+    def cache_mdc_metrics(self, cache_name: str, dc: Optional[str] = None) -> Dict[str, bool]:
+        """
+        Reads the cache's MDC safety metrics off a server node over JMX - see
+        :data:`MDC_SAFE_AFFINITY_METRIC` and :data:`MDC_SAFE_DISTRIBUTION_METRIC` for what
+        each of them claims.
+
+        Requires the cluster to have been built with ``jmx_metrics=True``, since the metrics
+        are only exposed by the JMX metric exporter.
+
+        :param cache_name: Cache to read the metrics of.
+        :param dc: DC whose node answers, the first one by default. Every server node reports
+               the same verdict, so this only matters for a partitioned cluster - where each
+               segment answers about the topology IT can see.
+        :return: Metric name -> value.
+        """
+        node = self.servers[dc if dc is not None else self.dcs[0]].alive_nodes[0]
+
+        mbean = node.cache_mbean(cache_name)
+
+        return {name: mbean.bool_value(name)
+                for name in (MDC_SAFE_AFFINITY_METRIC, MDC_SAFE_DISTRIBUTION_METRIC)}
+
+    def verify_cache_mdc_metrics(self, cache_name: str, affinity_safe: Optional[bool] = None,
+                                 distribution_safe: Optional[bool] = None, dc: Optional[str] = None):
+        """
+        Verifies the MDC safety metrics of a cache against what the scenario expects. Both
+        expectations are optional: a metric left as None is only reported, which is how a
+        scenario reads out a value whose verdict depends on the state of the topology rather
+        than on the point being made.
+
+        :return: The metrics that were read.
+        """
+        metrics = self.cache_mdc_metrics(cache_name, dc)
+
+        self.logger.info(f"MDC safety metrics [cache={cache_name}, dc={dc}, {metrics}]")
+
+        for name, expected in ((MDC_SAFE_AFFINITY_METRIC, affinity_safe),
+                               (MDC_SAFE_DISTRIBUTION_METRIC, distribution_safe)):
+            if expected is not None:
+                assert metrics[name] == expected, \
+                    f"{name} should be {expected} [cache={cache_name}, actual={metrics[name]}]"
+
+        return metrics
 
     def verify_cache_distribution(self, cache_name: str, copies_per_dc: Optional[int] = None,
                                   dc: Optional[str] = None):
