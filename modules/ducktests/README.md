@@ -300,13 +300,17 @@ A held test reports nothing back to ducktape, which kills a session it has heard
 | `dc_topology_demo.demo_dc_aware_ring_and_node_attributes` | 6 | DC ordered discovery ring via `--data-center print_topology`, DC id in the NODES system view | `dc-topology` |
 | `dc_topology_demo.demo_thin_client_connections_are_reported_per_dc` | 7 | thin client connections grouped by the client's DC | `thin-clients-connected` |
 | `local_dc_access_demo.demo_cache_api_reads_stay_in_the_local_dc` | 6 | Cache API reads served locally, measured against a 100 ms cross-DC delay | `reads-measured` |
-| `local_dc_access_demo.demo_sql_api_reads_stay_in_the_local_dc` | 6 | the same for SQL queries | `reads-measured` |
+| `local_dc_access_demo.demo_sql_api_reads_cross_the_dc_boundary` | 6 | the contrast: the default query engine maps a query onto the partition primaries, so a SELECT leaves the DC where a GET did not | `reads-measured` |
 | `local_dc_internals_demo.demo_rebalance_pulls_from_the_local_dc` | 5 | a wiped node rebalanced from a supplier in its own DC | `data-loaded`, `rebalanced` |
 | `local_dc_internals_demo.demo_snapshot_restore_in_mdc` | 5 | full snapshot restore into the stretched cluster, cross-DC layout preserved | `data-loaded`, `snapshot-restored` |
 | `recovery_demo.demo_split_brain_and_rejoin` | 6 | two DCs: cut link, active half + read-only half, heal, rejoin by restart | `cluster-up`, `data-loaded`, `split-brain`, `rejoined` |
 | `recovery_demo.demo_promote_the_read_only_half_ring_to_main` | 6 | promoting the reserve half-ring with `--set-main-dc` while the link is down | `split-brain`, `main-dc-reassigned` |
 | `main_dc_switch_demo.demo_minority_dc_goes_read_only_by_default` | 8 | three DCs: the majority keeps writing, the isolated DC goes read-only, no main DC mark | `minority-read-only` |
 | `main_dc_switch_demo.demo_promote_a_dc_when_no_majority_is_left` | 7 | three way split, one DC promoted by hand, and the mark dropped when the others rejoin | `no-majority`, `dc-promoted`, `network-restored` |
+| `attribute_filter_demo.demo_attribute_filter_splits_copies_into_subgroups_inside_a_dc` | 9 | `ClusterNodeAttributeAffinityBackupFilter` over `(DC, availability zone)`: one copy per pair, hence two per DC that cannot share a zone | `data-loaded`, `distribution` |
+| `attribute_filter_demo.demo_a_subgroup_attribute_alone_does_not_keep_a_copy_in_every_dc` | 5 | the same filter without the DC attribute - copies in distinct zones but not in distinct DCs, and the cache reported as not MDC safe | `distribution` |
+| `cell_filter_demo.demo_cells_stretched_across_dcs_keep_a_copy_in_every_dc` | 5 | `ClusterNodeAttributeColocatedBackupFilter` with cells spanning both DCs: colocation and the cross-DC guarantee at once, surviving a DC outage | `data-loaded`, `cells`, `dc-lost` |
+| `cell_filter_demo.demo_a_cell_confined_to_one_dc_loses_its_partitions` | 5 | cells drawn along the DC boundary: colocation honoured, every partition in one DC, and the partitions of the lost DC left with no owner | `distribution`, `dc-lost` |
 
 ### Security Settings
 ```bash

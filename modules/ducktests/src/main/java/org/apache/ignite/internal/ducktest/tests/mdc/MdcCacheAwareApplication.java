@@ -17,8 +17,10 @@
 
 package org.apache.ignite.internal.ducktest.tests.mdc;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.ignite.IgniteCache;
@@ -27,11 +29,15 @@ import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CacheWriteSynchronizationMode;
 import org.apache.ignite.cache.QueryEntity;
+import org.apache.ignite.cache.affinity.rendezvous.ClusterNodeAttributeAffinityBackupFilter;
+import org.apache.ignite.cache.affinity.rendezvous.ClusterNodeAttributeColocatedBackupFilter;
 import org.apache.ignite.cache.affinity.rendezvous.MdcAffinityBackupFilter;
 import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
+import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.internal.ducktest.tests.dto.IndexedDataRecord;
 import org.apache.ignite.internal.ducktest.utils.IgniteAwareApplication;
+import org.apache.ignite.lang.IgniteBiPredicate;
 import org.apache.ignite.topology.MdcTopologyValidator;
 
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_DATA_CENTER_ID;
@@ -60,6 +66,17 @@ import static org.apache.ignite.internal.ducktest.utils.Utils.getEnum;
  *     <li>{@code backupFilter} - whether to set the {@link MdcAffinityBackupFilter} on the affinity function,
  *         default {@code true}. Turning it off drops the "one copy of every partition in every DC" guarantee,
  *         and exists to demonstrate what the filter is responsible for;</li>
+ *     <li>{@code backupFilterKind} - which affinity backup filter to set, overriding {@code backupFilter}:
+ *         {@code MDC} (default), {@code ATTRIBUTE}, {@code COLOCATED} or {@code NONE}. A
+ *         {@link RendezvousAffinityFunction} holds exactly one backup filter, so these are alternatives
+ *         rather than additions - the MDC filter is replaced, not complemented;</li>
+ *     <li>{@code backupFilterAttrs} - {@code ATTRIBUTE} kind only, required: node attribute names whose
+ *         value TUPLE must differ between any two copies of a partition. Include
+ *         {@code org.apache.ignite.datacenter.id} to keep the cache MDC safe - the metric behind
+ *         {@code IsCacheAffinityConfigurationMdcSafe} looks for that exact internal attribute name and not
+ *         for the {@code IGNITE_DATA_CENTER_ID} system property that sets it;</li>
+ *     <li>{@code colocationAttr} - {@code COLOCATED} kind only, required: the node attribute whose value
+ *         all copies of a partition must share, i.e. the cell id;</li>
  *     <li>{@code cacheMode} - {@link CacheMode}, default {@code PARTITIONED};</li>
  *     <li>{@code atomicity} - {@link CacheAtomicityMode}, default {@code ATOMIC};</li>
  *     <li>{@code writeSync} - {@link CacheWriteSynchronizationMode}, default {@code FULL_SYNC}.
@@ -142,10 +159,11 @@ public abstract class MdcCacheAwareApplication extends IgniteAwareApplication {
 
         RendezvousAffinityFunction affinity = new RendezvousAffinityFunction().setPartitions(partitions);
 
-        if (jNode.path("backupFilter").asBoolean(DFLT_BACKUP_FILTER))
-            affinity.setAffinityBackupFilter(new MdcAffinityBackupFilter(dcsNum, backups));
-        else
-            log.info("MDC affinity backup filter is disabled [cache=" + cacheName + "]");
+        IgniteBiPredicate<ClusterNode, List<ClusterNode>> backupFilter =
+            backupFilter(jNode, cacheName, dcsNum, backups);
+
+        if (backupFilter != null)
+            affinity.setAffinityBackupFilter(backupFilter);
 
         CacheConfiguration<Integer, V> cacheCfg = new CacheConfiguration<Integer, V>()
             .setName(cacheName)
@@ -162,6 +180,95 @@ public abstract class MdcCacheAwareApplication extends IgniteAwareApplication {
             log.info("Cache level topology validator is disabled [cache=" + cacheName + "]");
 
         return cacheCfg;
+    }
+
+    /**
+     * Which affinity backup filter a cache is configured with. A
+     * {@link RendezvousAffinityFunction} holds exactly one, so these are alternatives.
+     */
+    protected enum BackupFilterKind {
+        /** No backup filter: plain rendezvous affinity, blind to data centers. */
+        NONE,
+
+        /** {@link MdcAffinityBackupFilter}: an equal share of the copies in every DC. */
+        MDC,
+
+        /** {@link ClusterNodeAttributeAffinityBackupFilter}: every copy in a distinct attribute group. */
+        ATTRIBUTE,
+
+        /** {@link ClusterNodeAttributeColocatedBackupFilter}: all copies of a partition in one cell. */
+        COLOCATED
+    }
+
+    /**
+     * @param jNode Parameters.
+     * @param cacheName Cache name, for logging.
+     * @param dcsNum Number of data centers.
+     * @param backups Number of backups.
+     * @return Affinity backup filter to set, or {@code null} for plain rendezvous affinity.
+     */
+    private IgniteBiPredicate<ClusterNode, List<ClusterNode>> backupFilter(JsonNode jNode, String cacheName,
+        int dcsNum, int backups) {
+        // The boolean stays the default source of the answer, so that the scenarios written
+        // before the other filters existed keep meaning what they did.
+        BackupFilterKind dflt = jNode.path("backupFilter").asBoolean(DFLT_BACKUP_FILTER)
+            ? BackupFilterKind.MDC
+            : BackupFilterKind.NONE;
+
+        BackupFilterKind kind = getEnum(jNode, "backupFilterKind", dflt);
+
+        log.info("Affinity backup filter [cache=" + cacheName + ", kind=" + kind + "]");
+
+        switch (kind) {
+            case NONE:
+                return null;
+
+            case MDC:
+                return new MdcAffinityBackupFilter(dcsNum, backups);
+
+            case ATTRIBUTE:
+                return new ClusterNodeAttributeAffinityBackupFilter(
+                    requiredAttrs(jNode, "backupFilterAttrs").toArray(new String[0]));
+
+            case COLOCATED:
+                return new ClusterNodeAttributeColocatedBackupFilter(requiredAttr(jNode, "colocationAttr"));
+
+            default:
+                throw new IllegalArgumentException("Unknown backup filter kind: " + kind);
+        }
+    }
+
+    /**
+     * @param jNode Parameters.
+     * @param name Parameter name holding a non-empty array of strings.
+     * @return Parameter value.
+     */
+    private static List<String> requiredAttrs(JsonNode jNode, String name) {
+        if (!jNode.hasNonNull(name))
+            throw new IllegalArgumentException("Parameter '" + name + "' is required by this backup filter.");
+
+        List<String> attrs = new ArrayList<>();
+
+        jNode.get(name).forEach(attr -> attrs.add(attr.asText()));
+
+        if (attrs.isEmpty())
+            throw new IllegalArgumentException("Parameter '" + name + "' must name at least one attribute.");
+
+        return attrs;
+    }
+
+    /**
+     * @param jNode Parameters.
+     * @param name Parameter name holding a non-empty string.
+     * @return Parameter value.
+     */
+    private static String requiredAttr(JsonNode jNode, String name) {
+        String val = jNode.hasNonNull(name) ? jNode.get(name).asText().trim() : "";
+
+        if (val.isEmpty())
+            throw new IllegalArgumentException("Parameter '" + name + "' is required by this backup filter.");
+
+        return val;
     }
 
     /**

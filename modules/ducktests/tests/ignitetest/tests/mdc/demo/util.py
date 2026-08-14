@@ -53,6 +53,30 @@ def show(test, title: str, output: str) -> CommandOutput:
     return CommandOutput(title, output)
 
 
+def partitions_without_owners(distribution, partitions: int) -> List[int]:
+    """
+    Finds the partitions that have no OWNING copy left anywhere in the segment the
+    distribution was read from - the data that a data center outage took with it.
+
+    A partition whose every owner is gone either drops out of the ``--cache distribution``
+    output altogether or stays in it with no OWNING copy; both count here.
+
+    :param distribution: CacheDistribution of a single cache group.
+    :param partitions: Total number of partitions the cache was configured with.
+    :return: Sorted partition ids that no live node owns.
+    """
+    lost = []
+
+    for group in distribution.groups.values():
+        for part in range(partitions):
+            copies = group.partitions.get(part, [])
+
+            if not any(copy.state == "OWNING" for copy in copies):
+                lost.append(part)
+
+    return sorted(lost)
+
+
 def partitions_missing_a_dc(distribution, dcs: Sequence[str]) -> List[str]:
     """
     Finds the partitions that break the "one copy of every partition in every DC" guarantee.

@@ -111,6 +111,20 @@ def dc_jvm_opts(dc: str) -> List[str]:
     return [f"-D{DATA_CENTER_ATTR}={dc}", f"-D{IGNITE_SQL_RETRY_TIMEOUT_ATTR}={IGNITE_SQL_RETRY_TIMEOUT_MS}"]
 
 
+def node_jvm_opts(dc: str, extra_attrs: Optional[Dict[str, str]] = None) -> List[str]:
+    """
+    Same as :func:`dc_jvm_opts` plus arbitrary extra node attributes.
+
+    Every system property a node is started with is registered as a node attribute, which is
+    what makes an attribute readable both by an affinity backup filter and by
+    ``control.sh --cache distribution --user-attributes``.
+
+    :param dc: Data center to assign the node to.
+    :param extra_attrs: Attribute name -> value, e.g. ``{"CELL": "CELL1"}``.
+    """
+    return dc_jvm_opts(dc) + [f"-D{name}={value}" for name, value in (extra_attrs or {}).items()]
+
+
 def mdc_topology_params(dcs: Sequence[str], main_dc: Optional[str] = None) -> dict:
     """
     Compiles the cache parameters that pin ``MdcTopologyValidator`` and
@@ -178,6 +192,30 @@ def _per_dc(value: Union[int, Dict[str, int]], dcs: Sequence[str]) -> Dict[str, 
     return dict(value)
 
 
+def _per_dc_groups(values: Union[Sequence[str], Dict[str, Sequence[str]]],
+                   dcs: Sequence[str]) -> Dict[str, Tuple[str, ...]]:
+    """
+    Normalizes the node group values of :class:`MdcCluster` into a per-DC dict.
+
+    A plain sequence gives every DC the same groups, which is how a group is stretched over
+    the data centers; a dict gives each DC its own, which is how a group is confined to one.
+    """
+    if not isinstance(values, dict):
+        return {dc: tuple(values) for dc in dcs}
+
+    unknown = sorted(dc for dc in values if dc not in dcs)
+
+    assert not unknown, \
+        f"Node groups name data centers the cluster does not span [unknown={unknown}, dcs={list(dcs)}]"
+
+    missing = sorted(dc for dc in dcs if dc not in values)
+
+    assert not missing, \
+        f"Every data center needs its node groups named [missing={missing}]"
+
+    return {dc: tuple(values[dc]) for dc in dcs}
+
+
 def _as_segment(segment: Segment) -> Tuple[str, ...]:
     """
     Normalizes a single DC name or a collection of DC names into a tuple of DC names.
@@ -204,6 +242,14 @@ class MdcCluster:
            topology validator mode - see :func:`mdc_topology_params`.
     :param main_dc: Main DC for an even-sized DC set, defaults to the first DC.
     :param srv_per_dc: Servers per DC, an int or a per-DC dict (asymmetric DCs).
+    :param srv_groups: Splits the servers of a DC into equally sized groups carrying an extra
+           node attribute, as ``(attribute name, values)``. Needed by the affinity backup
+           filters that group nodes by something finer than the DC (see attribute_filter_demo
+           and cell_filter_demo). ``srv_per_dc`` must be divisible by the number of a DC's
+           groups. The values are either a plain sequence, giving every DC the same groups -
+           ``("CELL", ("CELL1", "CELL2"))`` stretches both cells over both DCs - or a per-DC
+           dict, giving each DC groups of its own -
+           ``("CELL", {DC_1: ("CELL1",), DC_2: ("CELL2",)})`` confines each cell to one DC.
     :param runners_per_dc: Reusable run-to-completion app services per DC (generator,
            checkers, load bursts). An int or a per-DC dict.
     :param loaders_per_dc: Dedicated background load app services per DC. They run
@@ -213,6 +259,7 @@ class MdcCluster:
     def __init__(self, test, ignite_version: str, dcs: Sequence[str] = DCS_2,
                  main_dc: Optional[str] = None,
                  srv_per_dc: Union[int, Dict[str, int]] = 3,
+                 srv_groups: Optional[Tuple[str, Sequence[str]]] = None,
                  runners_per_dc: Union[int, Dict[str, int]] = 1,
                  loaders_per_dc: Union[int, Dict[str, int]] = 0,
                  client_connector: bool = False,
@@ -259,10 +306,21 @@ class MdcCluster:
 
         self.srv_per_dc = _per_dc(srv_per_dc, self.dcs)
 
-        self.servers: Dict[str, IgniteService] = {
-            dc: IgniteService(self.test_context, self.ignite_config, num_nodes=num, jvm_opts=dc_jvm_opts(dc),
-                              startup_timeout_sec=IGNITE_STARTUP_TIMEOUT_SEC)
-            for dc, num in self.srv_per_dc.items() if num > 0}
+        self.srv_group_attr = srv_groups[0] if srv_groups else None
+
+        # Per DC, because whether a group spans the data centers or sits inside one of them is
+        # the whole difference between a cell that survives a DC outage and one that does not.
+        self.srv_group_values: Dict[str, Tuple[str, ...]] = \
+            _per_dc_groups(srv_groups[1], self.dcs) if srv_groups else {}
+
+        self.srv_group_all: Tuple[str, ...] = tuple(sorted(
+            {value for values in self.srv_group_values.values() for value in values}))
+
+        # A DC's servers are one Ignite service per group value, because the group attribute
+        # is a system property and a ducktape service hands the same command line to all of
+        # its nodes. Without grouping that is exactly one service per DC, as it always was.
+        self.server_groups: Dict[str, List[IgniteService]] = {
+            dc: self._server_services(dc, num) for dc, num in self.srv_per_dc.items() if num > 0}
 
         self.runners: Dict[str, List[IgniteApplicationService]] = {
             dc: [self._app_service(dc) for _ in range(num)]
@@ -289,6 +347,95 @@ class MdcCluster:
 
         self.logger.info(f"MDC cache defaults [{self.cache_defaults}]")
 
+    def _server_services(self, dc: str, num_nodes: int) -> List[IgniteService]:
+        """
+        Builds a DC's server services: one per group value when the cluster is grouped,
+        a single one otherwise.
+        """
+        def service(nodes, extra_attrs=None):
+            return IgniteService(self.test_context, self.ignite_config, num_nodes=nodes,
+                                 jvm_opts=node_jvm_opts(dc, extra_attrs),
+                                 startup_timeout_sec=IGNITE_STARTUP_TIMEOUT_SEC)
+
+        if not self.srv_group_attr:
+            return [service(num_nodes)]
+
+        values = self.srv_group_values[dc]
+
+        assert num_nodes % len(values) == 0, \
+            f"Servers of a DC must split evenly between its node groups " \
+            f"[dc={dc}, servers={num_nodes}, groups={list(values)}]"
+
+        return [service(num_nodes // len(values), {self.srv_group_attr: value}) for value in values]
+
+    @property
+    def servers(self) -> Dict[str, IgniteService]:
+        """
+        :return: The single server service of every DC.
+
+        Only meaningful for an ungrouped cluster. A grouped one has several server services
+        per DC and has to say which it means, so this raises rather than silently answering
+        about the first group - see :meth:`dc_servers` and :meth:`all_servers`.
+        """
+        assert not self.srv_group_attr, \
+            f"A cluster split into node groups has several server services per DC; use " \
+            f"dc_servers()/all_servers() [attribute={self.srv_group_attr}, " \
+            f"groups={list(self.srv_group_all)}]"
+
+        return {dc: services[0] for dc, services in self.server_groups.items()}
+
+    def dc_servers(self, dc: str) -> List[IgniteService]:
+        """
+        :return: All server services of the given DC, one per node group.
+        """
+        return self.server_groups.get(dc, [])
+
+    def all_servers(self) -> List[IgniteService]:
+        """
+        :return: Every server service of the cluster, DCs in order.
+        """
+        return [svc for dc in sorted(self.server_groups) for svc in self.server_groups[dc]]
+
+    def _group_of(self, dc: str, service: IgniteService) -> Optional[str]:
+        """
+        :return: Node group value the given server service of a DC carries, None if the
+                 cluster is not grouped.
+        """
+        if not self.srv_group_attr:
+            return None
+
+        return self.srv_group_values[dc][self.server_groups[dc].index(service)]
+
+    def node_groups(self) -> Dict[str, str]:
+        """
+        Node id (as the node logs it about itself) -> node group value, for every alive
+        server node. The counterpart of :meth:`node_dcs` for the extra grouping attribute,
+        and the way a scenario checks how a group is laid out over the data centers.
+
+        :return: Empty dict when the cluster is not split into node groups.
+        """
+        if not self.srv_group_attr:
+            return {}
+
+        return {svc.node_id(node).lower(): self._group_of(dc, svc)
+                for dc, services in self.server_groups.items()
+                for svc in services for node in svc.alive_nodes}
+
+    def group_dcs(self) -> Dict[str, List[str]]:
+        """
+        :return: Node group value -> the DCs it has server nodes in. A group present in every
+                 DC is "stretched" across them, which is what makes a colocated cell survive
+                 the loss of a data center.
+        """
+        spread: Dict[str, List[str]] = {value: [] for value in self.srv_group_all}
+
+        for dc in self.dcs:
+            for svc in self.dc_servers(dc):
+                if svc.nodes:
+                    spread[self._group_of(dc, svc)].append(dc)
+
+        return spread
+
     @property
     def min_backups(self) -> int:
         """
@@ -312,13 +459,15 @@ class MdcCluster:
         that DC's addresses, so after a full stop its nodes would seed off themselves and
         form a separate cluster instead of rejoining the surviving DCs.
         """
-        discovery_spi = from_ignite_services(list(self.servers.values()))
+        discovery_spi = from_ignite_services(self.all_servers())
 
-        for service in self.servers.values():
+        for service in self.all_servers():
             service.config = service.config._replace(discovery_spi=discovery_spi)
 
     def _app_service(self, dc: str) -> IgniteApplicationService:
-        client_cfg = self.ignite_config._replace(client_mode=True, discovery_spi=from_ignite_cluster(self.servers[dc]))
+        # Seeding off the DC's first server service is enough: all of them are one cluster.
+        client_cfg = self.ignite_config._replace(client_mode=True,
+                                                 discovery_spi=from_ignite_cluster(self.dc_servers(dc)[0]))
 
         return IgniteApplicationService(self.test_context, client_cfg, jvm_opts=dc_jvm_opts(dc))
 
@@ -337,10 +486,7 @@ class MdcCluster:
         registry = {}
 
         for dc in self.dcs:
-            services = []
-
-            if dc in self.servers:
-                services.append(self.servers[dc])
+            services = list(self.dc_servers(dc))
 
             services += self.runners.get(dc, [])
             services += self.loaders.get(dc, [])
@@ -364,12 +510,20 @@ class MdcCluster:
         """
         lines = ["DATA CENTERS"]
 
+        # A grouped cluster gets a server row per group: which node sits in which cell or
+        # availability zone is precisely what those scenarios are being watched for.
+        def server_roles(dc):
+            if not self.srv_group_attr:
+                return [("server", self.dc_servers(dc))]
+
+            return [(f"server {self._group_of(dc, svc)}", [svc]) for svc in self.dc_servers(dc)]
+
         for dc in self.dcs:
             roles = [(label, [node.account.hostname for svc in services for node in svc.nodes])
-                     for label, services in (("server", [self.servers[dc]] if dc in self.servers else []),
-                                             ("runner", self.runners.get(dc, [])),
-                                             ("loader", self.loaders.get(dc, [])),
-                                             ("extra", self.extras.get(dc, [])))]
+                     for label, services in (server_roles(dc) +
+                                             [("runner", self.runners.get(dc, [])),
+                                              ("loader", self.loaders.get(dc, [])),
+                                              ("extra", self.extras.get(dc, []))])]
 
             # A DC that holds nothing is not named at all: an empty header reads as a DC whose
             # nodes have gone, which is exactly what a partition demo is being watched for.
@@ -377,7 +531,7 @@ class MdcCluster:
                 continue
 
             lines.append(f"  {dc}")
-            lines.extend(f"    {label:<7} {' '.join(hosts)}" for label, hosts in roles if hosts)
+            lines.extend(f"    {label:<12} {' '.join(hosts)}" for label, hosts in roles if hosts)
 
         return lines
 
@@ -387,8 +541,7 @@ class MdcCluster:
         """
         port = self.ignite_config.client_connector_configuration.port
 
-        return [f"{node.account.hostname}:{port}"
-                for dc in sorted(self.servers) for node in self.servers[dc].nodes]
+        return [f"{node.account.hostname}:{port}" for svc in self.all_servers() for node in svc.nodes]
 
     def start_servers(self, activate: Optional[bool] = None):
         """
@@ -398,8 +551,8 @@ class MdcCluster:
                cluster is activated (it comes up INACTIVE) and an in-memory one is not (it
                comes up ACTIVE already).
         """
-        for dc in sorted(self.servers):
-            self.servers[dc].start()
+        for svc in self.all_servers():
+            svc.start()
 
         if activate or (activate is None and self.persistent):
             self.control().activate()
@@ -408,8 +561,8 @@ class MdcCluster:
         """
         Stops all server services.
         """
-        for dc in sorted(self.servers):
-            self.servers[dc].stop()
+        for svc in self.all_servers():
+            svc.stop()
 
     def stop_dcs(self, *dcs: str):
         """
@@ -417,7 +570,8 @@ class MdcCluster:
         outage, as opposed to the network partition :func:`cross_dc_network` produces.
         """
         for dc in dcs:
-            self.servers[dc].stop()
+            for svc in self.dc_servers(dc):
+                svc.stop()
 
     def start_dcs(self, *dcs: str, clean: bool = False, await_rebalance: bool = True):
         """
@@ -430,22 +584,28 @@ class MdcCluster:
         Restarting the FIRST started DC needs :meth:`sync_service_discovery` beforehand.
         """
         for dc in dcs:
-            self.servers[dc].start(clean=clean)
+            for svc in self.dc_servers(dc):
+                svc.start(clean=clean)
 
         if await_rebalance:
             for dc in dcs:
-                self.servers[dc].await_rebalance()
+                for svc in self.dc_servers(dc):
+                    svc.await_rebalance()
 
     def restart(self, dc: str, clean: bool = False, await_rebalance: bool = True):
         """
         Restarts a whole DC preserving its persistence (the pattern used to rejoin a
         read-only segment back into the main cluster after a partition heals).
         """
-        self.servers[dc].stop()
-        self.servers[dc].start(clean=clean)
+        for svc in self.dc_servers(dc):
+            svc.stop()
+
+        for svc in self.dc_servers(dc):
+            svc.start(clean=clean)
 
         if await_rebalance:
-            self.servers[dc].await_rebalance()
+            for svc in self.dc_servers(dc):
+                svc.await_rebalance()
 
     def run_app(self, dc: str, java_class: str, params: dict, runner: int = 0) -> IgniteApplicationService:
         """
@@ -593,7 +753,7 @@ class MdcCluster:
         """
         :return: Control utility bound to the given DC's servers, the first DC by default.
         """
-        return ControlUtility(self.servers[dc if dc is not None else self.dcs[0]])
+        return ControlUtility(self.dc_servers(dc if dc is not None else self.dcs[0])[0])
 
     def set_main_dc(self, dc: str, new_main_dc: Optional[str] = None) -> str:
         """
@@ -617,7 +777,8 @@ class MdcCluster:
                  rebalance supplier, a baseline entry) into the DC it sits in.
         """
         return {svc.node_id(node).lower(): dc
-                for dc, svc in self.servers.items() for node in svc.alive_nodes}
+                for dc, services in self.server_groups.items()
+                for svc in services for node in svc.alive_nodes}
 
     def rebalance_suppliers(self, dc: str, node) -> List[str]:
         """
@@ -626,7 +787,9 @@ class MdcCluster:
         :return: Ids of the nodes the given node pulled partitions from, read out of its own
                  log. Empty when the node rebalanced nothing.
         """
-        out = self.servers[dc].exec_command(
+        owner = next(svc for svc in self.dc_servers(dc) if node in svc.nodes)
+
+        out = owner.exec_command(
             node, f"grep -o '{REBALANCE_SUPPLIER_PATTERN}' {node.log_file} || true")
 
         return sorted({line.split("=", 1)[1].strip().lower() for line in out.splitlines() if "=" in line})
@@ -646,7 +809,8 @@ class MdcCluster:
                segment answers about the topology IT can see.
         :return: Metric name -> value.
         """
-        node = self.servers[dc if dc is not None else self.dcs[0]].alive_nodes[0]
+        node = next(node for svc in self.dc_servers(dc if dc is not None else self.dcs[0])
+                    for node in svc.alive_nodes)
 
         mbean = node.cache_mbean(cache_name)
 
@@ -689,6 +853,46 @@ class MdcCluster:
                                                   expected_dcs=self.dcs, copies_per_dc=copies_per_dc)
 
         return distribution
+
+    def group_distribution(self, cache_name: str, dc: Optional[str] = None):
+        """
+        :return: CacheDistribution carrying both the DC and the node group of every copy, so
+                 that a scenario can assert on either dimension or on the pair.
+        """
+        return self.control(dc).cache_distribution(
+            cache_names=cache_name, user_attributes=[DATA_CENTER_ATTR, self.srv_group_attr])
+
+    def verify_cache_group_distribution(self, cache_name: str, copies_per_group: Optional[int] = None,
+                                        dc: Optional[str] = None):
+        """
+        Verifies that every partition has an OWNING copy in every (DC, node group) pair, and
+        optionally exactly ``copies_per_group`` of them - the guarantee
+        ``ClusterNodeAttributeAffinityBackupFilter`` gives when it is handed both attributes.
+
+        :return: The CacheDistribution for further custom assertions.
+        """
+        distribution = self.group_distribution(cache_name, dc)
+
+        expected = [(dc_name, value) for dc_name in self.dcs for value in self.srv_group_values[dc_name]]
+
+        assert_distribution_by_attributes(distribution, attrs=[DATA_CENTER_ATTR, self.srv_group_attr],
+                                          expected_values=expected, copies_per_value=copies_per_group)
+
+        return distribution
+
+    def verify_cache_colocation(self, cache_name: str, dc: Optional[str] = None):
+        """
+        Verifies that every partition keeps all of its OWNING copies inside one node group -
+        the cell ``ClusterNodeAttributeColocatedBackupFilter`` builds.
+
+        :return: (CacheDistribution, cell of every partition per cache group).
+        """
+        distribution = self.group_distribution(cache_name, dc)
+
+        cells = assert_partitions_colocated_by_attribute(distribution, attr=self.srv_group_attr,
+                                                         expected_values=self.srv_group_all)
+
+        return distribution, cells
 
     def verify_split_brain(self):
         """
@@ -754,7 +958,7 @@ class MdcCluster:
         name = _fmt_segment(dcs)
 
         exp_alive_nodes = sum(self.srv_per_dc[dc] for dc in dcs)
-        act_alive_nodes = sum(len(self.servers[dc].alive_nodes) for dc in dcs)
+        act_alive_nodes = sum(len(svc.alive_nodes) for dc in dcs for svc in self.dc_servers(dc))
 
         assert act_alive_nodes == exp_alive_nodes, \
             f"{exp_alive_nodes} nodes should be alive in {name}! [actual={act_alive_nodes}]"
@@ -783,7 +987,7 @@ class MdcCluster:
         were detected, no PME hang and no lost partitions were reported.
         """
         for pattern in (LRT_PATTERN, PME_FREEZE_PATTERN, LOST_PARTITIONS_PATTERN, ASSERTION_ERROR_PATTERN):
-            for svc in self.servers.values():
+            for svc in self.all_servers():
                 svc.check_event_absent(pattern, log_file=ALL_LOGS_GLOB)
 
     def verify_no_hanging_txs(self, dc: Optional[str] = None, try_kill_hanging_tx: bool = False):
@@ -868,45 +1072,128 @@ def assert_cross_dc_distribution_by_attribute(distribution, dc_attr, expected_dc
     def dc_of(copy):
         return copy.user_attributes.get(dc_attr)
 
-    _assert_cross_dc(distribution, set(expected_dcs), dc_of, owning_only, copies_per_dc,
-                     layout_hint=f"DC attribute: {dc_attr}, expected DCs: {sorted(expected_dcs)}")
+    _assert_spread(distribution, set(expected_dcs), dc_of, owning_only, copies_per_dc, label="DC",
+                   layout_hint=f"DC attribute: {dc_attr}, expected DCs: {sorted(expected_dcs)}")
 
 
-def _assert_cross_dc(distribution, expected_dcs, dc_of, owning_only, copies_per_dc, layout_hint):
+def assert_distribution_by_attributes(distribution, attrs, expected_values, owning_only=True,
+                                      copies_per_value=None):
+    """
+    The same check one level finer: every partition must have a copy in every group, where a
+    group is the TUPLE of values of several node attributes - which is exactly what
+    ``ClusterNodeAttributeAffinityBackupFilter`` spreads copies over.
+
+    :param distribution: CacheDistribution requested with user_attributes=attrs.
+    :param attrs: Attribute names forming the group key, e.g.
+                  ["IGNITE_DATA_CENTER_ID", "AVAILABILITY_ZONE"].
+    :param expected_values: Collection of value tuples that must each own a copy of every
+                            partition, e.g. [("DC1", "AZ1"), ("DC1", "AZ2"), ...].
+    :param owning_only: Count only copies in OWNING state as present.
+    :param copies_per_value: If set, each group must hold exactly this many copies.
+    """
+    expected = {tuple(value) for value in expected_values}
+
+    def group_of(copy):
+        return tuple(copy.user_attributes.get(attr) for attr in attrs)
+
+    _assert_spread(distribution, expected, group_of, owning_only, copies_per_value, label="group",
+                   layout_hint=f"attributes: {list(attrs)}, expected groups: {sorted(expected)}")
+
+
+def assert_partitions_colocated_by_attribute(distribution, attr, expected_values=None):
+    """
+    Asserts the opposite shape of guarantee: every partition keeps ALL of its OWNING copies
+    on nodes carrying ONE value of the attribute - the cell that
+    ``ClusterNodeAttributeColocatedBackupFilter`` builds.
+
+    Colocation alone says nothing about data centers: whether a cell survives the loss of one
+    is decided by how the cell is laid out over them, which is what
+    :meth:`MdcCluster.group_dcs` reports.
+
+    :param distribution: CacheDistribution requested with user_attributes=[attr].
+    :param attr: Attribute name holding the cell id, e.g. "CELL".
+    :param expected_values: If set, every partition's cell must be one of these.
+    :return: Cell of every partition, as ``{group name: {partition: cell}}``.
+    """
+    cells = {}
+    violations = []
+
+    for group in distribution.groups.values():
+        cells[group.name] = {}
+
+        for part, copies in sorted(group.partitions.items()):
+            owners = [c for c in copies if c.state == "OWNING"]
+
+            values = {c.user_attributes.get(attr) for c in owners}
+
+            cells[group.name][part] = next(iter(values)) if len(values) == 1 else None
+
+            problems = []
+
+            if len(values) > 1:
+                problems.append(f"copies span cells {sorted(values)}")
+
+            if expected_values is not None and not values <= set(expected_values):
+                problems.append(f"unexpected cells {sorted(values - set(expected_values))}")
+
+            if problems:
+                copies_dump = ", ".join(
+                    f"{c.node_id}({'P' if c.primary else 'B'},{c.state},"
+                    f"{attr}={c.user_attributes.get(attr)},{c.node_addresses})"
+                    for c in copies)
+
+                violations.append(f"group={group.name}(id={group.group_id}), partition={part}, "
+                                  f"{', '.join(problems)}, copies=[{copies_dump}]")
+
+    assert not violations, \
+        f"Partition copies are not colocated by {attr}:\n  " + "\n  ".join(violations)
+
+    return cells
+
+
+def _assert_spread(distribution, expected_groups, group_of, owning_only, copies_per_group, label,
+                   layout_hint):
+    """
+    Asserts that every partition of every cache group has a copy in every expected group,
+    where a group is whatever ``group_of(copy)`` returns - a DC id, or a tuple of several
+    node attribute values.
+    """
     violations = []
 
     for group in distribution.groups.values():
         for part, copies in sorted(group.partitions.items()):
             counted = [c for c in copies if not owning_only or c.state == "OWNING"]
 
-            per_dc = {dc: 0 for dc in expected_dcs}
+            per_group = {key: 0 for key in expected_groups}
 
             for copy in counted:
-                dc = dc_of(copy)
+                key = group_of(copy)
 
-                if dc in per_dc:
-                    per_dc[dc] += 1
+                if key in per_group:
+                    per_group[key] += 1
 
-            missing = {dc for dc, cnt in per_dc.items() if cnt == 0}
+            missing = {key for key, cnt in per_group.items() if cnt == 0}
 
-            unbalanced = {} if copies_per_dc is None else \
-                {dc: cnt for dc, cnt in per_dc.items() if cnt != copies_per_dc}
+            unbalanced = {} if copies_per_group is None else \
+                {key: cnt for key, cnt in per_group.items() if cnt != copies_per_group}
 
             if missing or unbalanced:
                 copies_dump = ", ".join(
-                    f"{c.node_id}({'P' if c.primary else 'B'},{c.state},dc={dc_of(c)},{c.node_addresses})"
+                    f"{c.node_id}({'P' if c.primary else 'B'},{c.state},{label}={group_of(c)},"
+                    f"{c.node_addresses})"
                     for c in copies)
 
                 problems = []
 
                 if missing:
-                    problems.append(f"missing DCs={sorted(missing)}")
+                    problems.append(f"missing {label}s={sorted(missing)}")
 
                 if unbalanced:
-                    problems.append(f"copies per DC != {copies_per_dc}: {unbalanced}")
+                    problems.append(f"copies per {label} != {copies_per_group}: {unbalanced}")
 
                 violations.append(f"group={group.name}(id={group.group_id}), partition={part}, "
                                   f"{', '.join(problems)}, copies=[{copies_dump}]")
 
     assert not violations, \
-        "Partition distribution is not cross-DC:\n  " + "\n  ".join(violations) + "\n" + layout_hint
+        f"Partition distribution does not cover every {label}:\n  " + "\n  ".join(violations) + \
+        "\n" + layout_hint
