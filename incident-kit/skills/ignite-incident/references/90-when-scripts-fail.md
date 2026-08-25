@@ -23,7 +23,7 @@ That sentence belongs in the report, in the "Collection gaps" section.
 ## Step 1 - Ask the script what it saw
 
 ```sh
-python <script>.py --inventory analysis/inventory.json --diagnose
+python "$SKILL/kit.py" diagnose "$BUNDLE" ignite|gc|os|nmon|threads
 ```
 
 Every digest supports `--diagnose`. It prints, per file: lines read, lines parsed, the
@@ -86,14 +86,16 @@ Sections and what each extends:
 Overlay patterns are tried **before** the built-ins, and every digest names the overlay in
 its header so a reader always knows a site-local rule was in play.
 
-A worked example lives in `samples/alien/site-patterns.json`: it repairs a bundle with a
+A worked example lives in `samples/alien-site-patterns.json`: it repairs a bundle with a
 different log4j layout, RFC5424 syslog framing and renamed nmon sections. Copy its shape.
 
 Then re-run with `--patterns`:
 
 ```sh
-python preflight.py --inventory analysis/inventory.json --patterns analysis/site-patterns.json
+python "$SKILL/kit.py" preflight "$BUNDLE"
 ```
+
+`kit.py` passes `analysis/site-patterns.json` automatically once it exists.
 
 (Scripts also pick up `site-patterns.json` automatically if it sits beside
 `inventory.json`. They will not search anywhere else - an overlay that loaded depending on
@@ -102,8 +104,8 @@ where you ran from would change results invisibly.)
 ## Step 4 - Verify. Both checks, every time.
 
 ```sh
-python preflight.py --inventory analysis/inventory.json --patterns analysis/site-patterns.json
-python selftest.py
+python "$SKILL/kit.py" preflight "$BUNDLE"
+python "$SKILL/kit.py" selftest
 ```
 
 1. **Preflight verdict must improve.** If it did not, your regex does not match; go back

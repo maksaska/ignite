@@ -68,14 +68,22 @@ ranges and whether they abut.
 **12. Reading raw logs into context.**
 Use the digests. If you find yourself paging through a log, you have skipped a script.
 
-**13. Grepping the Ignite repository.**
-`indexes/<version>/messages.tsv` maps the message to `file:line` directly. Exploring the
-repo burns context and finds the wrong overload.
+**13. Grepping the source repositories.**
+`analysis/indexes/messages.tsv` maps the message to repo, file and line directly, across
+every repository that makes up the product. Exploring burns context and finds the wrong
+overload.
 
-**14. Reading the source of the wrong version.**
-Log wording and line numbers drift between releases. Confirm the version from
-`00-inventory.md` and use the matching index directory. If the index version and the
-bundle version differ, say so before citing any line number.
+**14. Citing a line number from the wrong checkout.**
+Line numbers drift between branches - the same `Local node SEGMENTED` call sits ten lines
+apart on master and on a feature branch, and a citation from the wrong one points at
+unrelated code while reading perfectly plausibly. Check `INDEX-INFO.md`: if the indexed
+version differs from the bundle's banner, or the repository is dirty, cite the class and
+method instead. Phase 0.5 flags both, so there is no excuse for missing it.
+
+**14a. Assuming a message came from Apache Ignite.**
+The product is several repositories. If a literal appears in more than one, the fork may
+have overridden the Apache class and the code that ran is the fork's. Check the `repo`
+column before attributing behaviour to upstream.
 
 **15. Opening JFR without a question.**
 JFR is large and will fill your context with samples that answer nothing. Phase 3 must

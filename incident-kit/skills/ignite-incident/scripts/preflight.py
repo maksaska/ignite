@@ -28,6 +28,7 @@ Stdlib only.
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -216,7 +217,60 @@ CHECKERS = {
 }
 
 
-def render(rows, unknowns, skipped, overlay_path, overlay, out):
+RE_POM_VER = re.compile(r"\|\s*`?[\w.-]+`?\s*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|\s*"
+                        r"([\w.\-+]+)\s*\|")
+
+
+def check_indexes(indexes, bundle_vers, out):
+    """Compare the indexed source against the bundle, and say so loudly on mismatch.
+
+    This replaces the old `indexes/<version>/` placeholder: there is exactly one index
+    set per analysis, so the question is not "which index" but "was it built from the
+    right code". A line number cited from the wrong branch is worse than none.
+    """
+    w = out.write
+    w("## Source index provenance\n\n")
+    idx = Path(indexes) if indexes else None
+    if not idx or not idx.is_dir():
+        w("**No index directory.** Phase 4 source lookups will not be possible. Run\n"
+          "`kit.py init <bundle> --repo <path> ...` to build one.\n\n")
+        return
+    info = idx / "INDEX-INFO.md"
+    msgs = idx / "messages.tsv"
+    if not msgs.is_file():
+        w("**`messages.tsv` is missing from `%s`.** Re-run `kit.py init`.\n\n" % idx)
+        return
+    with msgs.open("r", encoding="utf-8", errors="replace") as fh:
+        n = sum(1 for _ in fh) - 1
+    w("Index: `%s` (%d message entries)\n\n" % (idx, max(n, 0)))
+    if not info.is_file():
+        w("**INDEX-INFO.md is missing** - the provenance of this index is unknown.\n\n")
+        return
+    text = info.read_text(encoding="utf-8", errors="replace")
+    w(text.split("## Version check")[0].split("\n", 2)[-1].strip() + "\n\n")
+
+    idx_vers = set(re.findall(r"\|\s*(\d+\.\d+\.\d+[\w.\-+]*)\s*\|\s*\d+\s*\|", text))
+    w("| | |\n|---|---|\n")
+    w("| Ignite version in the bundle | %s |\n" % (", ".join(sorted(bundle_vers)) or "not found"))
+    w("| Version of the indexed source | %s |\n\n" % (", ".join(sorted(idx_vers)) or "not stated"))
+
+    if "**YES**" in text:
+        w("> **An indexed repository has uncommitted changes.** Its line numbers describe a\n"
+          "> working copy, not any released build. Either commit/stash and re-run\n"
+          "> `kit.py init`, or cite classes and methods rather than line numbers.\n\n")
+    if bundle_vers and idx_vers and not (bundle_vers & idx_vers):
+        w("> ### VERSION MISMATCH\n>\n")
+        w("> The bundle came from Ignite %s but the index was built from %s. Class and\n"
+          "> method names are usually stable across 2.x; **line numbers are not**. Cite the\n"
+          "> class and method, not the line, or re-run `kit.py init` against a checkout of\n"
+          "> the matching release.\n\n"
+          % (", ".join(sorted(bundle_vers)), ", ".join(sorted(idx_vers))))
+    elif bundle_vers and idx_vers:
+        w("Versions agree - line numbers from this index can be cited directly.\n\n")
+
+
+def render(rows, unknowns, skipped, overlay_path, overlay, out,
+           indexes=None, bundle_vers=None):
     w = out.write
     w("# 00.5 - Preflight (Phase 0.5)\n\n")
     w("Does the tooling understand this bundle? No analysis happens here.\n\n")
@@ -280,6 +334,8 @@ def render(rows, unknowns, skipped, overlay_path, overlay, out):
               % (name, kind))
         w("\n")
 
+    check_indexes(indexes, bundle_vers or set(), out)
+
     w("## Phase 0.5 gate\n\n")
     w("- [ ] Verdict is OK, **or** every DEGRADED/FAILED file is listed in `00-inventory.md`\n"
       "      with what will not be claimed from it\n")
@@ -323,6 +379,7 @@ def main():
     ap.add_argument("--out", help="write Markdown here instead of stdout")
     ap.add_argument("--json", dest="json_out", help="machine-readable preflight result")
     ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--indexes", help="analysis/indexes directory, to check its provenance")
     ap.add_argument("--node", help="restrict to one node")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
@@ -341,6 +398,11 @@ def main():
 
     data = json.loads(Path(args.inventory).read_text(encoding="utf-8"))
     base = Path(data["root"])
+
+    # The Ignite version the bundle itself reports, for the provenance comparison.
+    bundle_vers = {f.get("details", {}).get("ignite_version", "").split("#")[0]
+                   for f in data["files"]}
+    bundle_vers = {v for v in bundle_vers if v}
 
     rows, unknowns, skipped = [], [], []
     for f in data["files"]:
@@ -367,10 +429,12 @@ def main():
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
-            render(rows, unknowns, skipped, overlay_path, overlay, fh)
+            render(rows, unknowns, skipped, overlay_path, overlay, fh,
+                   args.indexes, bundle_vers)
         print("wrote %s" % args.out)
     else:
-        render(rows, unknowns, skipped, overlay_path, overlay, sys.stdout)
+        render(rows, unknowns, skipped, overlay_path, overlay, sys.stdout,
+               args.indexes, bundle_vers)
 
     if args.json_out:
         Path(args.json_out).write_text(json.dumps({
