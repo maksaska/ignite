@@ -1,0 +1,6 @@
+[2024-03-14T10:19:44.220+0300][1289.132s][info][safepoint] Safepoint "G1CollectForAllocation", Time since last: 46782341000 ns, Reaching safepoint: 184320 ns, At safepoint: 48112000 ns, Total: 48296320 ns
+[2024-03-14T10:20:31.870+0300][1336.782s][info][safepoint] Safepoint "G1CollectForAllocation", Time since last: 47592118000 ns, Reaching safepoint: 201455 ns, At safepoint: 55401000 ns, Total: 55602455 ns
+[2024-03-14T10:21:20.410+0300][1385.322s][info][safepoint] Safepoint "G1CollectForAllocation", Time since last: 48478221000 ns, Reaching safepoint: 233871 ns, At safepoint: 62004000 ns, Total: 62237871 ns
+[2024-03-14T10:21:58.140+0300][1423.052s][info][safepoint] Safepoint "Cleanup", Time since last: 37667112000 ns, Reaching safepoint: 4820113 ns, At safepoint: 1204000 ns, Total: 6024113 ns
+[2024-03-14T10:22:32.010+0300][1456.922s][info][safepoint] Safepoint "G1CollectForAllocation", Time since last: 33852004000 ns, Reaching safepoint: 21468902114 ns, At safepoint: 481223000 ns, Total: 21950125114 ns
+[2024-03-14T10:22:54.010+0300][1478.922s][info][safepoint] Safepoint "Cleanup", Time since last: 138000000 ns, Reaching safepoint: 312004 ns, At safepoint: 908000 ns, Total: 1220004 ns

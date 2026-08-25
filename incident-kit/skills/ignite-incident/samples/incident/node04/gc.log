@@ -1,0 +1,8 @@
+[2024-03-14T09:58:27.500+0300][0.011s][info][gc,init] Version: 11.0.21+9-LTS
+[2024-03-14T09:58:27.501+0300][0.012s][info][gc     ] Using Shenandoah
+[2024-03-14T09:58:27.501+0300][0.012s][info][gc,init] Heuristics: Adaptive
+[2024-03-14T10:20:41.220+0300][1333.731s][info][gc,start] GC(122) Pause Init Mark (process weakrefs)
+[2024-03-14T10:20:41.223+0300][1333.734s][info][gc      ] GC(122) Pause Init Mark (process weakrefs) 2.881ms
+[2024-03-14T10:20:41.900+0300][1334.411s][info][gc      ] GC(122) Concurrent marking 676.442ms
+[2024-03-14T10:20:41.905+0300][1334.416s][info][gc      ] GC(122) Pause Final Mark 4.112ms
+[2024-03-14T10:20:42.500+0300][1335.011s][info][gc      ] GC(122) Concurrent evacuation 594.220ms

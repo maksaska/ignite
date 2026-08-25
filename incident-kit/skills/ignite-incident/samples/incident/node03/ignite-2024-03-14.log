@@ -1,0 +1,27 @@
+[2024-03-14T09:58:17,220][INFO ][main][IgniteLogInfoProviderImpl] 
+
+>>>    __________  ________________  
+>>>   /  _/ ___/ |/ /  _/_  __/ __/  
+>>>  _/ // (7 7    // /  / / / _/    
+>>> /___/\___/_/|_/___/ /_/ /___/   
+>>> 
+>>> ver. 2.16.0#20231215-sha1:d2c82c0f
+>>> 2024 Copyright(C) Apache Software Foundation
+>>> 
+
+[2024-03-14T09:58:17,301][INFO ][main][IgniteKernal] IgniteConfiguration [igniteInstanceName=null, failureDetectionTimeout=10000, clientFailureDetectionTimeout=30000, systemWorkerBlockedTimeout=null]
+[2024-03-14T09:58:17,455][INFO ][main][IgniteKernal] Local node [ID=c3d4e5f6-2222-4a2b-9c3d-000000000003, order=3, clientMode=false]
+[2024-03-14T09:58:17,460][INFO ][main][IgniteKernal] Local node addresses: [node03.dc1.internal/10.20.30.13]
+[2024-03-14T09:58:19,600][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=3, locNode=c3d4e5f6, servers=3, clients=0, state=ACTIVE, CPUs=96, offheap=144.0GB, heap=96.0GB]
+[2024-03-14T09:58:27,900][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=4, locNode=c3d4e5f6, servers=4, clients=0, state=ACTIVE, CPUs=128, offheap=192.0GB, heap=128.0GB]
+[2024-03-14T10:00:02,510][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint started [checkpointId=7a1c2a30-0003-4c11-9a01-000000000003, checkpointLockWait=0ms, checkpointLockHoldTime=59ms, pages=17904, reason='timeout']
+[2024-03-14T10:00:05,120][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint finished [cpId=7a1c2a30-0003-4c11-9a01-000000000003, pages=17904, markDuration=59ms, pagesWrite=2010ms, fsync=520ms, total=2610ms]
+[2024-03-14T10:15:02,700][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint started [checkpointId=7a1c2a30-0004-4c11-9a01-000000000004, checkpointLockWait=0ms, checkpointLockHoldTime=71ms, pages=203551, reason='too many dirty pages']
+[2024-03-14T10:20:33,880][WARN ][db-checkpoint-thread-#79][PageMemoryImpl] Throttling is applied to page modifications [percentOfPartTime=0.42, markDirty=4820 pages/sec, checkpointWrite=1150 pages/sec]
+[2024-03-14T10:21:58,140][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint finished [cpId=7a1c2a30-0004-4c11-9a01-000000000004, pages=203551, markDuration=71ms, pagesWrite=381220ms, fsync=34180ms, total=415440ms]
+[2024-03-14T10:22:53,995][WARN ][jvm-pause-detector-worker][LongJVMPauseDetector] Possible too long JVM pause: 21987 milliseconds.
+[2024-03-14T10:22:54,004][WARN ][tcp-disco-sock-reader-[]-#4][TcpDiscoverySpi] Socket write has timed out (consider increasing 'IgniteConfiguration.failureDetectionTimeout' configuration property) [failureDetectionTimeout=10000, rmtAddr=/10.20.30.11:47500, rmtPort=47500, sockTimeout=5000]
+[2024-03-14T10:22:54,110][WARN ][tcp-disco-msg-worker-#2][ServerImpl] Node is out of topology (probably, due to short-time network problems).
+[2024-03-14T10:22:54,118][WARN ][disco-event-worker-#61][GridDiscoveryManager] Local node SEGMENTED: TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003, consistentId=node03, addrs=[10.20.30.13], order=3, intOrder=3, isClient=false]
+[2024-03-14T10:22:54,131][ERROR][disco-event-worker-#61][FailureProcessor] Critical system error detected. Will be handled accordingly to configured handler [hnd=StopNodeOrHaltFailureHandler [tryStop=false, timeout=0, super=AbstractFailureHandler [ignoredFailureTypes=UnmodifiableSet [SYSTEM_WORKER_BLOCKED, SYSTEM_CRITICAL_OPERATION_TIMEOUT]]], failureCtx=FailureContext [type=SEGMENTATION, err=null]]
+[2024-03-14T10:22:54,140][ERROR][disco-event-worker-#61][StopNodeOrHaltFailureHandler] JVM will be halted immediately due to the failure: [failureCtx=FailureContext [type=SEGMENTATION, err=null]]

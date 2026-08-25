@@ -1,0 +1,19 @@
+[2024-03-14T09:58:15.100+0300][0.012s][info][gc,init] Version: 17.0.9+9-LTS (release)
+[2024-03-14T09:58:15.100+0300][0.012s][info][gc,init] CPUs: 32 total, 32 available
+[2024-03-14T09:58:15.100+0300][0.012s][info][gc,init] Memory: 128G
+[2024-03-14T09:58:15.101+0300][0.013s][info][gc,init] Heap Min Capacity: 32G
+[2024-03-14T09:58:15.101+0300][0.013s][info][gc,init] Heap Max Capacity: 32G
+[2024-03-14T09:58:15.101+0300][0.013s][info][gc,init] Heap Region Size: 16M
+[2024-03-14T09:58:15.102+0300][0.014s][info][gc     ] Using G1
+[2024-03-14T10:19:44.220+0300][1289.132s][info][gc,start] GC(408) Pause Young (Normal) (G1 Evacuation Pause)
+[2024-03-14T10:19:44.268+0300][1289.180s][info][gc      ] GC(408) Pause Young (Normal) (G1 Evacuation Pause) 18432M->9216M(32768M) 48.112ms
+[2024-03-14T10:19:44.268+0300][1289.180s][info][gc,cpu  ] GC(408) User=0.68s Sys=0.02s Real=0.05s
+[2024-03-14T10:20:31.870+0300][1336.782s][info][gc,start] GC(409) Pause Young (Normal) (G1 Evacuation Pause)
+[2024-03-14T10:20:31.925+0300][1336.837s][info][gc      ] GC(409) Pause Young (Normal) (G1 Evacuation Pause) 18944M->9420M(32768M) 55.401ms
+[2024-03-14T10:20:31.925+0300][1336.837s][info][gc,cpu  ] GC(409) User=0.74s Sys=0.03s Real=0.06s
+[2024-03-14T10:21:20.410+0300][1385.322s][info][gc,start] GC(410) Pause Young (Normal) (G1 Evacuation Pause)
+[2024-03-14T10:21:20.472+0300][1385.384s][info][gc      ] GC(410) Pause Young (Normal) (G1 Evacuation Pause) 19200M->9600M(32768M) 62.004ms
+[2024-03-14T10:21:20.472+0300][1385.384s][info][gc,cpu  ] GC(410) User=0.81s Sys=0.04s Real=0.06s
+[2024-03-14T10:22:32.010+0300][1456.922s][info][gc,start] GC(411) Pause Young (Normal) (G1 Evacuation Pause)
+[2024-03-14T10:22:53.960+0300][1478.872s][info][gc      ] GC(411) Pause Young (Normal) (G1 Evacuation Pause) 19456M->9800M(32768M) 481.223ms
+[2024-03-14T10:22:53.960+0300][1478.872s][info][gc,cpu  ] GC(411) User=1.02s Sys=0.44s Real=0.48s

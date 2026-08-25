@@ -1,0 +1,13 @@
+[2024-03-14T09:58:11.000+0300][0.010s][info][gc,init] Initializing The Z Garbage Collector
+[2024-03-14T09:58:11.000+0300][0.010s][info][gc,init] Version: 17.0.9+9-LTS (release)
+[2024-03-14T09:58:11.001+0300][0.011s][info][gc,init] Max Capacity: 32768M
+[2024-03-14T09:58:11.002+0300][0.012s][info][gc     ] Using The Z Garbage Collector
+[2024-03-14T10:20:03.110+0300][1312.120s][info][gc,start] GC(88) Garbage Collection (Proactive)
+[2024-03-14T10:20:03.112+0300][1312.122s][info][gc,phases] GC(88) Pause Mark Start 1.204ms
+[2024-03-14T10:20:03.998+0300][1313.008s][info][gc,phases] GC(88) Concurrent Mark 884.113ms
+[2024-03-14T10:20:04.001+0300][1313.011s][info][gc,phases] GC(88) Pause Mark End 1.882ms
+[2024-03-14T10:20:04.410+0300][1313.420s][info][gc,phases] GC(88) Pause Relocate Start 0.904ms
+[2024-03-14T10:20:04.980+0300][1313.990s][info][gc      ] GC(88) Garbage Collection (Proactive) 14336M(43%)->6144M(18%)
+[2024-03-14T10:20:03.112+0300][1312.122s][info][safepoint] Safepoint "ZMarkStart", Time since last: 60112004000 ns, Reaching safepoint: 142004 ns, At safepoint: 1204000 ns, Total: 1346004 ns
+[2024-03-14T10:20:04.001+0300][1313.011s][info][safepoint] Safepoint "ZMarkEnd", Time since last: 887004000 ns, Reaching safepoint: 118332 ns, At safepoint: 1882000 ns, Total: 2000332 ns
+[2024-03-14T10:20:04.410+0300][1313.420s][info][safepoint] Safepoint "ZRelocateStart", Time since last: 407004000 ns, Reaching safepoint: 99120 ns, At safepoint: 904000 ns, Total: 1003120 ns

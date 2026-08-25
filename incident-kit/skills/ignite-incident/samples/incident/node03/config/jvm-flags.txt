@@ -1,0 +1,9 @@
+-Xms32g
+-Xmx32g
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-XX:+AlwaysPreTouch
+-XX:+ExitOnOutOfMemoryError
+-Xlog:gc*:file=/var/log/ignite/gc.log:time,uptime,level,tags:filecount=10,filesize=100M
+-Xlog:safepoint:file=/var/log/ignite/safepoint.log:time,uptime,level,tags
+-DIGNITE_QUIET=false

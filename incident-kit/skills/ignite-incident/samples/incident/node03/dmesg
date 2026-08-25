@@ -1,0 +1,14 @@
+[1287834.112004] TCP: request_sock_TCP: Possible SYN flooding on port 47100. Sending cookies.
+[1288401.554120] kswapd0: page allocation stalls for 10248ms, order:0, mode:0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP)
+[1288402.001338] Node 0 Normal free:210448kB min:198220kB low:247772kB high:297324kB
+[1288455.880221] INFO: task java:34981 blocked for more than 20 seconds.
+[1288455.880233]       Not tainted 5.15.0-91-generic #101-Ubuntu
+[1288455.880240] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[1288455.880248] task:java            state:D stack:    0 pid:34981 ppid:  1 flags:0x00000004
+[1288455.880262] Call Trace:
+[1288455.880270]  __schedule+0x24e/0x590
+[1288455.880281]  schedule+0x69/0x110
+[1288455.880288]  io_schedule+0x46/0x80
+[1288455.880295]  folio_wait_bit_common+0x124/0x350
+[1288455.880304]  swap_readpage+0x1a2/0x2c0
+[1288478.220114] kswapd0: page allocation stalls for 21993ms, order:0, mode:0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP)

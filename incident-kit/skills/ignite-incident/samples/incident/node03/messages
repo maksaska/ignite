@@ -1,0 +1,8 @@
+Mar 14 10:15:01 node03 systemd[1]: Started Session 88213 of user root.
+Mar 14 10:18:44 node03 kernel: kswapd0: page allocation stalls for 10248ms, order:0
+Mar 14 10:20:33 node03 kernel: Node 0 Normal free:210448kB min:198220kB low:247772kB
+Mar 14 10:22:35 node03 kernel: INFO: task java:34981 blocked for more than 20 seconds.
+Mar 14 10:22:58 node03 kernel: kswapd0: page allocation stalls for 21993ms, order:0
+Mar 14 10:22:59 node03 systemd[1]: ignite.service: Main process exited, code=exited, status=1/FAILURE
+Mar 14 10:22:59 node03 systemd[1]: ignite.service: Failed with result 'exit-code'.
+Mar 14 10:23:29 node03 systemd[1]: ignite.service: Scheduled restart job, restart counter is at 1.

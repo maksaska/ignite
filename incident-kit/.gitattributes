@@ -1,0 +1,3 @@
+# The kit runs on Linux and its fixtures stand in for Linux log files. Keep
+# everything LF in the working tree so parsers behave identically on any host.
+* text=auto eol=lf

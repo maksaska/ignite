@@ -1,0 +1,81 @@
+name	kind	default	file	line
+DFLT_METRICS_HISTORY_SIZE	constant	10000	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	121
+DFLT_METRICS_UPDATE_FREQ	constant	2000	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	124
+DFLT_NETWORK_TIMEOUT	constant	5000	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	133
+DFLT_P2P_MISSED_RESOURCES_CACHE_SIZE	constant	100	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	151
+DFLT_DATA_STREAMER_POOL_SIZE	constant	DFLT_PUBLIC_THREAD_CNT	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	166
+DFLT_REBALANCE_THREAD_POOL_SIZE	constant	min(4, max(1, AVAILABLE_PROC_CNT / 4))	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	169
+DFLT_QUERY_THREAD_POOL_SIZE	constant	DFLT_PUBLIC_THREAD_CNT	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	175
+DFLT_BUILD_IDX_THREAD_POOL_SIZE	constant	min(4, max(1, AVAILABLE_PROC_CNT / 4))	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	178
+DFLT_SEG_CHK_FREQ	constant	10000	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	202
+DFLT_METRICS_LOG_FREQ	constant	60000	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	205
+DFLT_SNAPSHOT_THREAD_POOL_SIZE	constant	4	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	220
+DFLT_LONG_QRY_WARN_TIMEOUT	constant	SqlConfiguration.DFLT_LONG_QRY_WARN_TIMEOUT	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	254
+DFLT_SQL_QUERY_HISTORY_SIZE	constant	SqlConfiguration.DFLT_SQL_QUERY_HISTORY_SIZE	modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	262
+setDefaultQueryTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	1125
+setMetricsUpdateFrequency	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	1501
+setNetworkTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	1556
+setNetworkSendRetryCount	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	1638
+setRebalanceTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	1716
+setSegmentCheckFrequency	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	2059
+setClientFailureDetectionTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	2213
+setFailureDetectionTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	2240
+setSystemWorkerBlockedTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	2265
+setMetricsLogFrequency	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	2940
+setLongQueryWarningTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java	3302
+DFLT_JOIN_TIMEOUT	constant	0	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	247
+DFLT_NETWORK_TIMEOUT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	250
+DFLT_TOP_HISTORY_SIZE	constant	1000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	256
+DFLT_SOCK_TIMEOUT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	259
+DFLT_ACK_TIMEOUT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	262
+DFLT_SOCK_TIMEOUT_CLIENT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	265
+DFLT_ACK_TIMEOUT_CLIENT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	268
+DFLT_RECONNECT_CNT	constant	10	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	271
+DFLT_IP_FINDER_CLEAN_FREQ	constant	60 * 1000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	277
+DFLT_STATS_PRINT_FREQ	constant	0	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	280
+DFLT_MAX_ACK_TIMEOUT	constant	10 * 60 * 1000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	283
+DFLT_CONNECTION_RECOVERY_TIMEOUT	constant	IgniteConfiguration.DFLT_FAILURE_DETECTION_TIMEOUT	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	289
+DFLT_DISCOVERY_CLIENT_RECONNECT_HISTORY_SIZE	constant	512	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	292
+DFLT_NODE_IDS_HISTORY_SIZE	constant	50	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	295
+DFLT_THROTTLE_RECONNECT_RESET_TIMEOUT_INTERVAL	constant	2 * 60_000	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	301
+DFLT_UTLITY_POOL_SIZE	constant	4	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	307
+DFLT_RMT_DC_PING_POOL_SIZE	constant	Math.max(8, Runtime.getRuntime().availableProcessors() / 2)	modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	310
+setReconnectCount	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	695
+setMaxAckTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	755
+setStatisticsPrintFrequency	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	843
+setIpFinderCleanFrequency	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	870
+setSocketTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	932
+setAckTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	954
+setNetworkTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	984
+setJoinTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	1017
+setConnectionRecoveryTimeout	setter		modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java	1111
+DFLT_IDLE_CONN_TIMEOUT	constant	10 * 60_000	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	217
+DFLT_SOCK_BUF_SIZE	constant	32 * 1024	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	220
+DFLT_CONN_TIMEOUT	constant	5000	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	223
+DFLT_MAX_CONN_TIMEOUT	constant	10 * 60 * 1000	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	226
+DFLT_RECONNECT_CNT	constant	10	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	229
+DFLT_ACK_SND_THRESHOLD	constant	32	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	258
+DFLT_SOCK_WRITE_TIMEOUT	constant	2000	modules/core/src/main/java/org/apache/ignite/spi/communication/tcp/TcpCommunicationSpi.java	261
+DFLT_DATA_REGION_INITIAL_SIZE	constant	256L * 1024 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	82
+DFLT_PAGE_SIZE	constant	4 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	93
+DFLT_CHECKPOINT_FREQ	constant	180000	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	105
+DFLT_SUB_INTERVALS	constant	5	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	115
+DFLT_RATE_TIME_INTERVAL_MILLIS	constant	60_000	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	118
+DFLT_WAL_HISTORY_SIZE	constant	20	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	127
+DFLT_WAL_ARCHIVE_MAX_SIZE	constant	1024 * 1024 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	130
+DFLT_WAL_SEGMENT_SIZE	constant	64 * 1024 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	136
+DFLT_TLB_SIZE	constant	128 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	142
+DFLT_WAL_BUFF_SIZE	constant	DFLT_WAL_SEGMENT_SIZE / 4	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	145
+DFLT_WAL_FLUSH_FREQ	constant	2000	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	148
+DFLT_WAL_RECORD_ITERATOR_BUFFER_SIZE	constant	64 * 1024 * 1024	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	154
+DFLT_CDC_WAL_DIRECTORY_MAX_SIZE	constant	0	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	169
+DFLT_DEFRAGMENTATION_THREAD_POOL_SIZE	constant	4	modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	181
+setCheckpointFrequency	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	658
+setMetricsRateTimeInterval	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	983
+setMetricsSubIntervalCount	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	1009
+setWalFlushFrequency	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	1104
+setWalForceArchiveTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	1232
+setCheckpointReadLockTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/DataStorageConfiguration.java	1318
+DFLT_TRANSACTION_TIMEOUT	constant	0	modules/core/src/main/java/org/apache/ignite/configuration/TransactionConfiguration.java	53
+setDefaultTxTimeout	setter		modules/core/src/main/java/org/apache/ignite/configuration/TransactionConfiguration.java	220
+setTxTimeoutOnPartitionMapExchange	setter		modules/core/src/main/java/org/apache/ignite/configuration/TransactionConfiguration.java	254

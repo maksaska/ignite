@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans">
+    <bean class="org.apache.ignite.configuration.IgniteConfiguration">
+        <property name="failureDetectionTimeout" value="10000"/>
+        <property name="clientFailureDetectionTimeout" value="30000"/>
+        <property name="segmentationPolicy" value="USE_FAILURE_HANDLER"/>
+        <property name="failureHandler">
+            <bean class="org.apache.ignite.failure.StopNodeOrHaltFailureHandler"/>
+        </property>
+        <property name="dataStorageConfiguration">
+            <bean class="org.apache.ignite.configuration.DataStorageConfiguration">
+                <property name="walMode" value="LOG_ONLY"/>
+                <property name="checkpointFrequency" value="900000"/>
+                <property name="writeThrottlingEnabled" value="true"/>
+                <property name="defaultDataRegionConfiguration">
+                    <bean class="org.apache.ignite.configuration.DataRegionConfiguration">
+                        <property name="maxSize" value="#{48L * 1024 * 1024 * 1024}"/>
+                        <property name="persistenceEnabled" value="true"/>
+                    </bean>
+                </property>
+            </bean>
+        </property>
+    </bean>
+</beans>

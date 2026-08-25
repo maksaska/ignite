@@ -1,0 +1,37 @@
+[2024-03-14T09:58:02,110][INFO ][main][IgniteLogInfoProviderImpl] 
+
+>>>    __________  ________________  
+>>>   /  _/ ___/ |/ /  _/_  __/ __/  
+>>>  _/ // (7 7    // /  / / / _/    
+>>> /___/\___/_/|_/___/ /_/ /___/   
+>>> 
+>>> ver. 2.16.0#20231215-sha1:d2c82c0f
+>>> 2024 Copyright(C) Apache Software Foundation
+>>> 
+>>> Ignite documentation: https://ignite.apache.org
+
+[2024-03-14T09:58:02,140][INFO ][main][IgniteKernal] Config URL: file:/opt/ignite/config/ignite-config.xml
+[2024-03-14T09:58:02,142][INFO ][main][IgniteKernal] IgniteConfiguration [igniteInstanceName=null, failureDetectionTimeout=10000, clientFailureDetectionTimeout=30000, systemWorkerBlockedTimeout=null, metricsLogFrequency=60000]
+[2024-03-14T09:58:02,900][INFO ][main][TcpDiscoverySpi] Successfully bound to TCP port [port=47500, localHost=0.0.0.0/0.0.0.0]
+[2024-03-14T09:58:04,331][INFO ][main][GridDiscoveryManager] Topology snapshot [ver=1, locNode=a1b2c3d4, servers=1, clients=0, state=ACTIVE, CPUs=32, offheap=48.0GB, heap=32.0GB]
+[2024-03-14T09:58:11,020][INFO ][disco-event-worker-#61][GridDiscoveryManager] Added new node to topology: TcpDiscoveryNode [id=b2c3d4e5-1111-4a2b-9c3d-000000000002, consistentId=node02, addrs=[10.20.30.12], order=2, intOrder=2, isClient=false]
+[2024-03-14T09:58:11,024][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=2, locNode=a1b2c3d4, servers=2, clients=0, state=ACTIVE, CPUs=64, offheap=96.0GB, heap=64.0GB]
+[2024-03-14T09:58:19,551][INFO ][disco-event-worker-#61][GridDiscoveryManager] Added new node to topology: TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003, consistentId=node03, addrs=[10.20.30.13], order=3, intOrder=3, isClient=false]
+[2024-03-14T09:58:19,558][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=3, locNode=a1b2c3d4, servers=3, clients=0, state=ACTIVE, CPUs=96, offheap=144.0GB, heap=96.0GB]
+[2024-03-14T09:58:27,880][INFO ][disco-event-worker-#61][GridDiscoveryManager] Added new node to topology: TcpDiscoveryNode [id=d4e5f6a7-3333-4a2b-9c3d-000000000004, consistentId=node04, addrs=[10.20.30.14], order=4, intOrder=4, isClient=false]
+[2024-03-14T09:58:27,884][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=4, locNode=a1b2c3d4, servers=4, clients=0, state=ACTIVE, CPUs=128, offheap=192.0GB, heap=128.0GB]
+[2024-03-14T09:59:02,001][INFO ][exchange-worker-#63][GridDhtPartitionsExchangeFuture] Finished exchange init [topVer=AffinityTopologyVersion [topVer=4, minorTopVer=0], crd=true]
+[2024-03-14T10:00:02,441][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint started [checkpointId=8f1c2a30-0001-4c11-9a01-000000000001, startPtr=FileWALPointer [idx=118, fileOff=2938112, len=53], checkpointBeforeLockTime=18ms, checkpointLockWait=0ms, checkpointListenersExecuteTime=41ms, checkpointLockHoldTime=63ms, walCpRecordFsyncDuration=11ms, pages=18422, reason='timeout']
+[2024-03-14T10:00:04,902][INFO ][db-checkpoint-thread-#79][Checkpointer] Checkpoint finished [cpId=8f1c2a30-0001-4c11-9a01-000000000001, pages=18422, markPos=FileWALPointer [idx=118, fileOff=2938112, len=53], walSegmentsCleared=0, walSegmentsCovered=[118], markDuration=63ms, pagesWrite=1980ms, fsync=481ms, total=2522ms]
+[2024-03-14T10:22:31,455][WARN ][tcp-disco-msg-worker-[crd]-#2][TcpDiscoverySpi] Socket write has timed out (consider increasing 'IgniteConfiguration.failureDetectionTimeout' configuration property) [failureDetectionTimeout=10000, rmtAddr=/10.20.30.13:47500, rmtPort=47500, sockTimeout=5000]
+[2024-03-14T10:22:31,458][WARN ][tcp-disco-msg-worker-[crd]-#2][ServerImpl] Failed to send message to next node [msg=TcpDiscoveryMetricsUpdateMessage [super=TcpDiscoveryAbstractMessage [sndNodeId=a1b2c3d4-0000-4a2b-9c3d-000000000001, id=1f2e3d4c-0001]], next=TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003, consistentId=node03, addrs=[10.20.30.13], order=3], errMsg=Failed to send message to next node [msg=TcpDiscoveryMetricsUpdateMessage, next=TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003]]]
+[2024-03-14T10:22:41,470][WARN ][tcp-disco-msg-worker-[crd]-#2][ServerImpl] Failed to send message to next node, try previous [msg=TcpDiscoveryMetricsUpdateMessage, next=TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003, consistentId=node03, addrs=[10.20.30.13], order=3]]
+[2024-03-14T10:22:41,512][WARN ][tcp-disco-msg-worker-[crd]-#2][ServerImpl] Local node has detected failed nodes and started cluster-wide procedure. To speed up failure detection please see 'Failure Detection' section under javadoc for 'TcpDiscoverySpi'
+[2024-03-14T10:22:41,690][INFO ][disco-event-worker-#61][GridDiscoveryManager] Node FAILED: TcpDiscoveryNode [id=c3d4e5f6-2222-4a2b-9c3d-000000000003, consistentId=node03, addrs=[10.20.30.13], order=3, intOrder=3, isClient=false]
+[2024-03-14T10:22:41,701][INFO ][disco-event-worker-#61][GridDiscoveryManager] Topology snapshot [ver=5, locNode=a1b2c3d4, servers=3, clients=0, state=ACTIVE, CPUs=96, offheap=144.0GB, heap=96.0GB]
+[2024-03-14T10:22:41,712][INFO ][disco-event-worker-#61][GridDiscoveryManager]   ^-- Baseline [id=0, size=4, online=3, offline=1]
+[2024-03-14T10:22:41,880][INFO ][exchange-worker-#63][GridDhtPartitionsExchangeFuture] Started exchange init [topVer=AffinityTopologyVersion [topVer=5, minorTopVer=0], crd=true, evt=NODE_FAILED, evtNode=c3d4e5f6-2222-4a2b-9c3d-000000000003]
+[2024-03-14T10:23:11,905][WARN ][exchange-worker-#63][GridDhtPartitionsExchangeFuture] Unable to await partitions release latch within timeout. Waiting for latch [latch=ServerLatch [permits=1, pendingAcks=HashSet [d4e5f6a7-3333-4a2b-9c3d-000000000004], super=CompletableLatch [id=CompletableLatchUid [id=exchange, topVer=AffinityTopologyVersion [topVer=5, minorTopVer=0]]]]]
+[2024-03-14T10:23:41,910][WARN ][exchange-worker-#63][GridCachePartitionExchangeManager] Failed to wait for partition map exchange [topVer=AffinityTopologyVersion [topVer=5, minorTopVer=0], node=a1b2c3d4-0000-4a2b-9c3d-000000000001]. Dumping pending objects that might be the cause: 
+[2024-03-14T10:24:12,330][INFO ][exchange-worker-#63][GridDhtPartitionsExchangeFuture] Finished exchange init [topVer=AffinityTopologyVersion [topVer=5, minorTopVer=0], crd=true]
+[2024-03-14T10:24:13,001][INFO ][sys-#88][GridDhtPreloader] Starting rebalance routine [grp=default, topVer=AffinityTopologyVersion [topVer=5, minorTopVer=0], supplier=b2c3d4e5-1111-4a2b-9c3d-000000000002, fullPartitions=[0-511], histPartitions=[]]

@@ -1,0 +1,42 @@
+2024-03-14 10:22:50
+Full thread dump OpenJDK 64-Bit Server VM (17.0.9+9-LTS mixed mode, sharing):
+
+Threads class SMR info:
+_java_thread_list=0x00007f2c4c0031a0, length=412, elements={
+0x00007f2cc000d800, 0x00007f2cc0114800, 0x00007f2cc0119800
+}
+
+"main" #1 prio=5 os_prio=0 cpu=1204.31ms elapsed=1456.22s tid=0x00007f2cc000d800 nid=0x88a5 waiting on condition  [0x00007f2cd41fe000]
+   java.lang.Thread.State: WAITING (parking)
+	at jdk.internal.misc.Unsafe.park(java.base@17.0.9/Native Method)
+	at java.util.concurrent.locks.LockSupport.park(java.base@17.0.9/LockSupport.java:341)
+	at org.apache.ignite.internal.util.future.GridFutureAdapter.get0(GridFutureAdapter.java:178)
+
+"db-checkpoint-thread-#79" #79 prio=5 os_prio=0 cpu=418220.11ms elapsed=1440.02s tid=0x00007f2cc0114800 nid=0x88f1 runnable  [0x00007f2cb01fe000]
+   java.lang.Thread.State: RUNNABLE
+	at sun.nio.ch.FileDispatcherImpl.force0(java.base@17.0.9/Native Method)
+	at sun.nio.ch.FileDispatcherImpl.force(java.base@17.0.9/FileDispatcherImpl.java:82)
+	at org.apache.ignite.internal.processors.cache.persistence.file.AsyncFileIO.force(AsyncFileIO.java:200)
+	at org.apache.ignite.internal.processors.cache.persistence.checkpoint.Checkpointer.body(Checkpointer.java:412)
+	- locked <0x00000006c1a04d18> (a java.lang.Object)
+
+"sys-stripe-3-#7" #17 prio=5 os_prio=0 cpu=88220.44ms elapsed=1455.90s tid=0x00007f2cc0119800 nid=0x8901 waiting for monitor entry  [0x00007f2ca81fe000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at org.apache.ignite.internal.processors.cache.persistence.pagemem.PageMemoryImpl.acquirePage(PageMemoryImpl.java:812)
+	- waiting to lock <0x00000006c1a04d18> (a java.lang.Object)
+	at org.apache.ignite.internal.processors.cache.GridCacheMapEntry.innerUpdate(GridCacheMapEntry.java:2204)
+
+"sys-stripe-4-#8" #18 prio=5 os_prio=0 cpu=87110.20ms elapsed=1455.90s tid=0x00007f2cc011a800 nid=0x8902 waiting for monitor entry  [0x00007f2ca80fe000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at org.apache.ignite.internal.processors.cache.persistence.pagemem.PageMemoryImpl.acquirePage(PageMemoryImpl.java:812)
+	- waiting to lock <0x00000006c1a04d18> (a java.lang.Object)
+
+"tcp-disco-msg-worker-#2" #22 prio=10 os_prio=0 cpu=4820.10ms elapsed=1456.10s tid=0x00007f2cc011b800 nid=0x8903 runnable  [0x00007f2ca7ffe000]
+   java.lang.Thread.State: RUNNABLE
+	at sun.nio.ch.Net.poll(java.base@17.0.9/Native Method)
+	at org.apache.ignite.spi.discovery.tcp.ServerImpl$RingMessageWorker.body(ServerImpl.java:2988)
+
+"jvm-pause-detector-worker" #24 prio=5 os_prio=0 cpu=120.44ms elapsed=1456.00s tid=0x00007f2cc011c800 nid=0x8904 waiting on condition  [0x00007f2ca7efe000]
+   java.lang.Thread.State: TIMED_WAITING (sleeping)
+	at java.lang.Thread.sleep(java.base@17.0.9/Native Method)
+	at org.apache.ignite.internal.LongJVMPauseDetector$1.run(LongJVMPauseDetector.java:97)

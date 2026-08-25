@@ -1,0 +1,4 @@
+# The repository root .gitignore excludes *.log. The files below are synthetic
+# fixtures (no real incident data) that selftest.py asserts against, so they must
+# be tracked. Re-include them for this directory only.
+!*.log
