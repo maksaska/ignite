@@ -28,6 +28,14 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
+
+def overlay_safepoints(overlay):
+    """Site-local safepoint line grammars, tried before the built-in two."""
+    return [re.compile(rx) for rx in (overlay or {}).get("safepoint_formats", [])]
+
 # --------------------------------------------------------------------------- #
 # Unified-log decorator parsing.
 #
@@ -154,7 +162,44 @@ class Digest:
         self.lines = 0
 
 
-def scan(path, dg, window):
+def parse_safepoint(msg, extra_sp=None):
+    """Return dict(op, ttsp_s, at_s, total_s, fmt) for a safepoint line, or None.
+
+    Site patterns are tried first. They need named groups ttsp/at/total (any two are
+    enough - the third is derived) and may set `unit` to 's' for seconds; nanoseconds
+    are assumed otherwise.
+    """
+    for rx in (extra_sp or []):
+        m = rx.search(msg)
+        if not m:
+            continue
+        g = m.groupdict()
+        scale = 1.0 if (g.get("unit") or "ns") in ("s", "sec", "seconds") else 1e-9
+        ttsp = float(g["ttsp"]) * scale if g.get("ttsp") else 0.0
+        total = float(g["total"]) * scale if g.get("total") else 0.0
+        at = float(g["at"]) * scale if g.get("at") else max(0.0, total - ttsp)
+        return {"op": g.get("op") or "(site pattern)", "ttsp_s": ttsp, "at_s": at,
+                "total_s": total or (ttsp + at), "fmt": "site"}
+
+    m = RE_SP17.search(msg)
+    if m:
+        return {"op": m.group("op"),
+                "ttsp_s": int(m.group("ttsp")) / 1e9,
+                "at_s": int(m.group("at")) / 1e9,
+                "total_s": int(m.group("total")) / 1e9,
+                "fmt": "jdk17"}
+
+    m = RE_SP11.search(msg)
+    if m:
+        total = float(m.group("total").replace(",", "."))
+        ttsp = float(m.group("ttsp").replace(",", "."))
+        return {"op": "(not named in JDK 11 format)", "ttsp_s": ttsp,
+                "at_s": max(0.0, total - ttsp), "total_s": total, "fmt": "jdk11"}
+    return None
+
+
+def scan(path, dg, window, extra_sp=None, health=None):
+    extra_sp = extra_sp or []
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for lineno, raw in enumerate(fh, 1):
             line = raw.rstrip("\n")
@@ -162,6 +207,8 @@ def scan(path, dg, window):
                 continue
             dg.lines += 1
             u = parse_unified(line)
+            if health is not None:
+                health.line(u is not None, lineno, line)
             if u is None:
                 dg.unparsed += 1
                 continue
@@ -187,23 +234,13 @@ def scan(path, dg, window):
 
             tags = u["tags"]
             if "safepoint" in tags:
-                m = RE_SP17.search(msg)
-                if m:
-                    dg.safepoints.append({
-                        "dt": dt, "uptime": u["uptime"], "op": m.group("op"),
-                        "ttsp_s": int(m.group("ttsp")) / 1e9,
-                        "at_s": int(m.group("at")) / 1e9,
-                        "total_s": int(m.group("total")) / 1e9,
-                        "fmt": "jdk17", "file": path.name, "line": lineno})
-                    continue
-                m = RE_SP11.search(msg)
-                if m:
-                    total = float(m.group("total").replace(",", "."))
-                    ttsp = float(m.group("ttsp").replace(",", "."))
-                    dg.safepoints.append({
-                        "dt": dt, "uptime": u["uptime"], "op": "(not named in JDK 11 format)",
-                        "ttsp_s": ttsp, "at_s": max(0.0, total - ttsp), "total_s": total,
-                        "fmt": "jdk11", "file": path.name, "line": lineno})
+                sp = parse_safepoint(msg, extra_sp)
+                if sp:
+                    sp.update({"dt": dt, "uptime": u["uptime"],
+                               "file": path.name, "line": lineno})
+                    dg.safepoints.append(sp)
+                    if health is not None:
+                        health.recognised += 1
                     continue
 
             if any(t == "gc" or t.startswith("gc") for t in tags):
@@ -212,6 +249,8 @@ def scan(path, dg, window):
                         if len(dg.trouble[label]) < 12:
                             dg.trouble[label].append((dt, msg[:180], path.name, lineno))
                 m = RE_GC_EVENT.match(msg)
+                if m and health is not None:
+                    health.recognised += 1
                 if m and "start" not in tags:
                     ms = float(m.group("ms").replace(",", "."))
                     desc = m.group("desc")
@@ -257,10 +296,12 @@ def worst_windows(items, key_dt, key_sec, width_s, top):
     return picked
 
 
-def render(dg, args, out):
+def render(dg, args, out, healths=None, overlay_path=None, overlay=None):
     w = out.write
     w("# 20 - GC and safepoint digest (Phase 2)\n\n")
     w("Files read: %s\n\n" % ", ".join("`%s`" % f for f in dg.files))
+    if healths is not None:
+        P.render_health(healths, out, overlay_path, overlay)
     w("| | |\n|---|---|\n")
     w("| Collector | %s |\n" % (dg.collector or "NOT DETECTED - check the flags dump"))
     w("| JDK | %s |\n" % (dg.jdk or "not stated in log"))
@@ -485,6 +526,9 @@ def main():
                     help="width of the cumulative-stop window (default 60)")
     ap.add_argument("--ttsp-alarm", type=float, default=1.0,
                     help="TTSP seconds above which the 'not GC' warning fires (default 1.0)")
+    ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="report parse health and unparsed lines instead of the digest")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
 
@@ -509,12 +553,26 @@ def main():
               "or name files explicitly.", file=sys.stderr)
         return 1
 
+    try:
+        overlay, overlay_path = P.load_overlay(args.patterns, near=args.inventory)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+    extra_sp = overlay_safepoints(overlay)
+
     dg = Digest()
+    healths = []
     for p in paths:
         if not p.is_file():
             continue
         dg.files.append(p.name)
-        scan(p, dg, window)
+        health = P.Health(p.name)
+        healths.append(health)
+        scan(p, dg, window, extra_sp, health)
+
+    if args.diagnose:
+        P.render_diagnose(healths, sys.stdout, overlay_path, overlay)
+        return 0 if P.worst(healths) == P.OK else 2
 
     if not dg.gc_events and not dg.safepoints:
         print("error: parsed %d lines from %s but recognised no GC or safepoint records.\n"
@@ -525,11 +583,11 @@ def main():
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
-            render(dg, args, fh)
+            render(dg, args, fh, healths, overlay_path, overlay)
         print("wrote %s (%d gc events, %d safepoints)"
               % (args.out, len(dg.gc_events), len(dg.safepoints)))
     else:
-        render(dg, args, sys.stdout)
+        render(dg, args, sys.stdout, healths, overlay_path, overlay)
 
     if args.json_out:
         payload = {

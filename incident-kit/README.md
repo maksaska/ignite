@@ -14,10 +14,13 @@ context on.
 ```
 incident-kit/
   skills/ignite-incident/
-    SKILL.md            the six-phase procedure with hard gates
-    references/         nine documents: failure mechanics, evidence limits, antipatterns
+    SKILL.md            the phased procedure with hard gates
+    references/         ten documents: failure mechanics, evidence limits, antipatterns,
+                        and the repair ladder for when a parser cannot read a file
     scripts/            digest scripts (python3, stdlib only, no pip installs)
     samples/            synthetic fixtures - no real incident data
+                          incident/  a complete, well-formed incident
+                          alien/     deliberately unreadable formats + a worked overlay
   indexes/<version>/
     messages.tsv        ~12k Ignite log literals -> file:line     (built here, committed)
     sysprops.tsv        209 IGNITE_* system properties
@@ -27,7 +30,7 @@ incident-kit/
   templates/workspace/  the analysis skeleton copied next to each incident
 ```
 
-## The three ideas it is built on
+## The four ideas it is built on
 
 **1. The model must not explore the repository.** Every "find where this message comes
 from" is answered by `grep` against `messages.tsv`, which maps a log literal to an exact
@@ -40,7 +43,17 @@ reduces gigabytes to a bounded table - histograms, top-N, worst windows - with `
 references so anything interesting can be read narrowly. Reading raw logs is how an
 analysis runs out of context before it starts.
 
-**3. The procedure is gated, not suggested.** Six phases, each of which must produce its
+**3. Parse failure must be loud.** The kit's worst failure mode is not a script that
+crashes - it is a script that half-works, emits a thin but plausible digest, and lets every
+phase downstream treat it as complete. "The parser found no kernel events" and "the parser
+could not read this file" produce identical output unless something measures the
+difference. So `preflight.py` reports, per file, what fraction the real parsers understood,
+plus a completeness cross-check that catches events being dropped even at a 100% parse
+rate; every digest carries a parse-health header; and a degraded file is barred from
+supporting any claim of absence. Repairs go into a `site-patterns.json` overlay rather than
+the scripts - see `references/90-when-scripts-fail.md`.
+
+**4. The procedure is gated, not suggested.** Six phases, each of which must produce its
 findings file before the next may start. The findings files are the model's memory, so a
 small context window stops being the limiting factor. JFR and Ignite source are locked
 behind a written question, because "let me look and see if anything stands out" is where
@@ -51,6 +64,7 @@ the budget goes.
 | phase | question | output |
 |---|---|---|
 | 0 | What do I have, and on which clocks? | `00-inventory.md` |
+| 0.5 | Can the parsers actually read it? | `00.5-preflight.md` |
 | 1 | What did the cluster do? | `10-cluster-timeline.md` |
 | 2 | What was the machine doing? | `20-resource-findings.md` |
 | 3 | What could explain both? | `30-hypotheses.md` |
@@ -75,6 +89,11 @@ cp -r templates/workspace/. /path/to/incident/analysis/
 # 5. point the CLI at the incident directory and say:
 #    "Run the ignite-incident skill, Phase 0."
 ```
+
+Phase 0.5 (`preflight.py`) then tells you whether the parsers can actually read this
+bundle before any of it is interpreted. If it reports DEGRADED or FAILED, work
+`skills/ignite-incident/references/90-when-scripts-fail.md` rather than pressing on - a
+partial parse produces a digest that looks complete and is not.
 
 Then review each phase's findings file before letting it continue. That review is where a
 weaker model gets caught going astray, and each file is short enough to actually read.
@@ -102,6 +121,7 @@ does, what it assumes, and how to read its output.
 | script | phase | what it produces |
 |---|---|---|
 | `identify.py` | 0 | classifies every file by content signature; detects collector, JDK, safepoint format, clock domain |
+| `preflight.py` | 0.5 | how much of each file the real parsers understood, plus a completeness cross-check |
 | `ignite_timeline.py` | 1 | cross-node event timeline, log gaps, topology history, checkpoint timings |
 | `gc_digest.py` | 2 | TTSP vs at-safepoint split, pause histogram, worst stop windows |
 | `os_digest.py` | 2 | OOM, reclaim stalls, hung tasks with call traces, NIC/storage/clock events |
@@ -109,7 +129,8 @@ does, what it assumes, and how to read its output.
 | `threaddump_digest.py` | 2 | thread states, monitor contention and lock owners, pool saturation |
 | `correlate.py` | 3 | one time-aligned table across all sources |
 | `jfr_query.py` | 4 | gated JFR access, reduced to frame histograms |
-| `selftest.py` | - | 63 assertions against the fixtures |
+| `patterns.py` | - | shared library: the site-pattern overlay and parse-health reporting |
+| `selftest.py` | - | 88 assertions against the fixtures |
 
 ## Testing
 
@@ -118,10 +139,17 @@ digests reach the right conclusions - that the TTSP split is 97% on the fixture,
 lock owner is the checkpoint thread, that a timestamped filename still classifies by
 content, and so on. Run it after any parser change, and after installing on a new machine.
 
-The fixtures are synthetic and contain no real data. They encode one complete incident:
-a slow checkpoint drives memory pressure, memory pressure produces a 21-second
+`samples/incident/` is synthetic and contains no real data. It encodes one complete
+incident: a slow checkpoint drives memory pressure, memory pressure produces a 21-second
 time-to-safepoint stall, the stall stops discovery heartbeats, the coordinator evicts the
 node, and the node halts itself on segmentation.
+
+`samples/alien/` holds deliberately unreadable formats - a different log4j layout, a JDK 8
+GC log, RFC5424 syslog framing, renamed nmon sections. The selftest uses them to prove that
+parse failure is reported rather than hidden (in particular that an unreadable syslog is
+never presented as evidence that nothing happened), and that
+`samples/alien-site-patterns.json` repairs the bundle end to end. That overlay is also the
+worked example a model is expected to imitate.
 
 ## Scope and limits
 

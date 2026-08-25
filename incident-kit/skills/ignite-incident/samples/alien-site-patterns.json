@@ -1,0 +1,35 @@
+{
+  "_readme": [
+    "Demo overlay: repairs the alien-format bundle in samples/alien/.",
+    "This is what a model is expected to produce when preflight reports FAILED,",
+    "and selftest.py uses it to prove the repair path works end to end.",
+    "See references/90-when-scripts-fail.md for the procedure that produces a file like this."
+  ],
+  "file_signatures": {
+    "ignite_log": [
+      ["\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} +(?:INFO|WARN|ERROR|DEBUG) ", 4],
+      ["o\\.a\\.i\\.[a-z]", 3]
+    ],
+    "syslog": [
+      ["^<\\d+>\\d \\d{4}-\\d{2}-\\d{2}T", 6]
+    ],
+    "gc_log": [
+      ["\\[GC pause \\(|\\[Times: user=", 6]
+    ]
+  },
+  "ignite_line_layouts": [
+    "^(?P<date>\\d{4}-\\d{2}-\\d{2}) (?P<time>\\d{2}:\\d{2}:\\d{2}),(?P<ms>\\d{3}) +(?P<level>[A-Z]+) +\\[(?P<thread>(?:[^\\]\\[]|\\[[^\\]\\[]*\\])*)\\] +(?P<cat>\\S+) - (?P<msg>.*)$"
+  ],
+  "ignite_events": [],
+  "os_patterns": [
+    ["memory_reclaim", 3, "under sustained pressure, reclaim latency",
+     "Vendor kernel wording for reclaim pressure - the same meaning as 'page allocation stalls'."],
+    ["hung_task", 3, "uninterruptible sleep exceeded",
+     "Vendor kernel wording for a hung task - the process was blocked, almost always on I/O."]
+  ],
+  "nmon_aliases": {
+    "CPU_ALL": ["PCPU_ALL"],
+    "MEM": ["MEMNEW"]
+  },
+  "safepoint_formats": []
+}

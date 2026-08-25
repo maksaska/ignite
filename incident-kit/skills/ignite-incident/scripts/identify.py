@@ -16,6 +16,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
 HEAD_BYTES = 192 * 1024
 TAIL_BYTES = 96 * 1024
 
@@ -51,6 +54,9 @@ SIGNATURES = {
     ],
     "syslog": [
         (r"^[A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \S+ ", 5),
+        # journald/rsyslog RFC3339 export -- common enough to be a built-in, not a site quirk
+        (r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?"
+         r"(?:[+-]\d{2}:?\d{2}|Z)?\s+\S+\s+\w", 5),
         (r"systemd\[\d+\]:|kernel:", 2),
     ],
     "nmon": [
@@ -90,7 +96,8 @@ BINARY_MAGIC = [
 # Timestamp grammars, per kind.
 # --------------------------------------------------------------------------- #
 
-RE_IGNITE_TS = re.compile(r"\[(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})[,.](\d{3})\]")
+RE_IGNITE_TS = re.compile(
+    r"^\[?(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})[,.](\d{3})\]?", re.M)
 RE_JVM_TS = re.compile(r"\[(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.(\d{3})([+-]\d{4})\]")
 RE_JVM_UPTIME = re.compile(r"\[(\d+\.\d+)s\]")
 RE_DMESG_TS = re.compile(r"^\[\s*(\d+\.\d{6})\]", re.M)
@@ -308,10 +315,26 @@ def human(n):
     return "%.1fTB" % size
 
 
+# The analysis workspace normally lives beside the bundle, and the overlay file quotes
+# log patterns verbatim -- so without this, the kit classifies its own output as evidence
+# (site-patterns.json full of GC regexes reads convincingly as a GC log).
+SELF_FILES = {"site-patterns.json", "inventory.json", "preflight.json", "timeline.json",
+              "gc.json", "os.json", "signatures.local.json"}
+SELF_DIRS = {"analysis"}
+
+
+def is_self_artifact(rel):
+    return rel.name in SELF_FILES or bool(SELF_DIRS.intersection(rel.parts[:-1]))
+
+
 def walk(root, extra_sigs):
     results = []
+    skipped_self = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
+            continue
+        if is_self_artifact(path.relative_to(root)):
+            skipped_self.append(str(path.relative_to(root)).replace("\\", "/"))
             continue
         size = path.stat().st_size
         rel = str(path.relative_to(root)).replace("\\", "/")
@@ -473,7 +496,8 @@ def main():
     ap.add_argument("root", nargs="?", help="incident bundle directory")
     ap.add_argument("--out", help="write Markdown here instead of stdout")
     ap.add_argument("--json", dest="json_out", help="also write machine-readable inventory here")
-    ap.add_argument("--signatures", help="extra signatures JSON (site-local additions)")
+    ap.add_argument("--patterns", help="site-patterns.json overlay (file_signatures section)")
+    ap.add_argument("--signatures", help="deprecated alias for --patterns")
     ap.add_argument("--explain", action="store_true", help="print what this script does and assumes")
     args = ap.parse_args()
 
@@ -488,10 +512,18 @@ def main():
         print("error: %s is not a directory" % root, file=sys.stderr)
         return 1
 
-    extra = None
-    if args.signatures and Path(args.signatures).exists():
-        raw = json.loads(Path(args.signatures).read_text(encoding="utf-8"))
-        extra = {k: [(p, int(w)) for p, w in v] for k, v in raw.items()}
+    try:
+        # No auto-discovery here: identify.py is pointed at the BUNDLE, and an overlay
+        # sitting among the evidence must not silently change classification. The other
+        # scripts auto-discover beside inventory.json, i.e. inside the analysis workspace.
+        overlay, overlay_path = P.load_overlay(args.patterns or args.signatures)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+    extra = {k: [(pat, int(w)) for pat, w in v]
+             for k, v in (overlay.get("file_signatures") or {}).items()} or None
+    if overlay_path:
+        print("using overlay %s" % overlay_path, file=sys.stderr)
 
     results = walk(root, extra)
 

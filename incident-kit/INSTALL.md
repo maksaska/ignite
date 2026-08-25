@@ -39,7 +39,7 @@ source tree for `tools/build_index.py`, but the kit itself is self-contained.
 python "$KIT/skills/ignite-incident/scripts/selftest.py"
 ```
 
-Expect `63 checks, 0 failed`. If anything fails, fix that before continuing - a failing
+Expect `88 checks, 0 failed`. If anything fails, fix that before continuing - a failing
 parser will silently produce a wrong digest later. `--keep` preserves the generated
 output for inspection.
 
@@ -155,6 +155,37 @@ cp -r "$KIT/templates/workspace/." "$BUNDLE/analysis/"
 
 ---
 
+## 6b. First run against a real bundle: check the parsers can read it
+
+Before any analysis, and before trusting a single digest:
+
+```sh
+python "$KIT/skills/ignite-incident/scripts/identify.py" "$BUNDLE" \
+    --out "$BUNDLE/analysis/00-inventory.md" \
+    --json "$BUNDLE/analysis/inventory.json"
+
+python "$KIT/skills/ignite-incident/scripts/preflight.py" \
+    --inventory "$BUNDLE/analysis/inventory.json" \
+    --out "$BUNDLE/analysis/00.5-preflight.md"
+```
+
+Exit 0 = every file parsed. 2 = something parsed only partially. 1 = something failed, or
+files are still unclassified.
+
+**Expect a non-zero exit on the first real bundle.** Site formats vary, and this kit has
+only ever seen synthetic fixtures. That is what the overlay mechanism is for: read
+`$KIT/skills/ignite-incident/references/90-when-scripts-fail.md` and work the ladder -
+`--diagnose`, read the file within the stated limits, write a regex into
+`site-patterns.json`, then re-run preflight **and** `selftest.py`.
+
+`$KIT/skills/ignite-incident/samples/alien-site-patterns.json` is a complete worked
+example that repairs a bundle with a different log4j layout, RFC5424 syslog framing and
+renamed nmon sections. Copy its shape.
+
+The rule that matters: **a file that did not parse cannot support any claim.** Not "no
+errors were found", not "this rules out memory pressure" - only "this file could not be
+read", recorded under Collection gaps.
+
 ## 7. Post-install smoke test
 
 Run the skill against the bundled fixtures, end to end. This exercises the real path
@@ -166,8 +197,10 @@ T=$(mktemp -d)
 python "$S/scripts/identify.py"       "$S/samples/incident" --out "$T/00-inventory.md" --json "$T/inventory.json"
 python "$S/scripts/ignite_timeline.py" --inventory "$T/inventory.json" --out "$T/10.md" --json "$T/timeline.json"
 python "$S/scripts/gc_digest.py"       --inventory "$T/inventory.json" --node node03 --out "$T/20-gc.md" --json "$T/gc.json"
+python "$S/scripts/preflight.py"        --inventory "$T/inventory.json" --out "$T/00.5.md"
 python "$S/scripts/correlate.py"       --analysis "$T" --out "$T/30.md" --year 2024
 grep -c "READ THIS BEFORE BLAMING GC" "$T/20-gc.md"     # expect 1
+grep -c "100.0%" "$T/00.5.md"                           # expect 11 (all fixtures parse)
 ```
 
 `identify.py` exits **2** here on purpose - the fixtures include one deliberately

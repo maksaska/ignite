@@ -23,6 +23,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
 # --------------------------------------------------------------------------- #
 # Line grammar. Site log4j patterns vary; we degrade gracefully.
 # --------------------------------------------------------------------------- #
@@ -87,7 +90,52 @@ RE_EXC = re.compile(r"\b((?:[a-z][\w]*\.)+[A-Z]\w*(?:Exception|Error|Throwable))
 RE_LATCH_ACK = re.compile(r"pendingAcks=\w*\s*\[([^\]]*)\]")
 
 
-def parse_line(line):
+# Lines that legitimately carry no timestamp: the startup banner, stack traces and other
+# continuations of the record above. They must not count against the parse rate, or every
+# healthy Ignite log looks degraded.
+RE_CONTINUATION = re.compile(
+    r"^(?:\s|>>>|at\s|\.\.\.\s|Caused by:|Suppressed:|\t|-{3,}|\^-{2,})")
+
+
+def is_record_start(line):
+    """True if this line should begin a log record, i.e. failing to parse it is a problem."""
+    return bool(line.strip()) and not RE_CONTINUATION.match(line)
+
+
+def overlay_layouts(overlay):
+    """Compile site-local line layouts. Tried BEFORE the built-in layout."""
+    if not overlay:
+        return []
+    return [re.compile(rx) for rx in overlay.get("ignite_line_layouts", [])]
+
+
+def overlay_events(overlay):
+    """Site-local event patterns first, then the built-in catalogue."""
+    extra = []
+    for cat, sev, rx in (overlay or {}).get("ignite_events", []):
+        extra.append((cat, int(sev), re.compile(rx)))
+    return extra + EVENTS
+
+
+def _group(m, name, default=""):
+    """Named group or a default -- overlay layouts may legitimately omit groups."""
+    val = m.groupdict().get(name)
+    return default if val is None else val
+
+
+def parse_line(line, layouts=None):
+    """Return (date, time, ms, level, thread, cat, msg) or None.
+
+    A FULL parse fills thread and cat. The timestamp-only fallback leaves them empty --
+    callers treat that as a DEGRADED parse, because losing the thread and logger fields
+    silently strips information the analysis depends on.
+    """
+    for rx in (layouts or []):
+        m = rx.match(line)
+        if m:
+            return (_group(m, "date"), _group(m, "time"), _group(m, "ms", "000"),
+                    _group(m, "level").strip(), _group(m, "thread"),
+                    _group(m, "cat"), _group(m, "msg"))
     m = RE_FULL.match(line)
     if m:
         return (m.group("date"), m.group("time"), m.group("ms"),
@@ -105,7 +153,7 @@ def to_dt(date, time, ms):
     return datetime.strptime("%s %s.%s" % (date, time, ms), "%Y-%m-%d %H:%M:%S.%f")
 
 
-def scan_log(path, node, window):
+def scan_log(path, node, window, layouts=None, events_tbl=None, health=None):
     """Yield events, gaps, topology history, checkpoints and exceptions for one log."""
     events = []
     gaps = []
@@ -115,11 +163,16 @@ def scan_log(path, node, window):
     prev_dt = None
     prev_line = 0
     counts = Counter()
+    events_tbl = events_tbl or EVENTS
 
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for lineno, raw in enumerate(fh, 1):
             line = raw.rstrip("\n")
-            p = parse_line(line)
+            p = parse_line(line, layouts)
+            if health is not None and is_record_start(line):
+                # A timestamp-only fallback (empty thread AND logger) counts as NOT
+                # parsed: it silently drops the fields the analysis depends on.
+                health.line(bool(p) and (p[4] != "" or p[5] != ""), lineno, line)
             if p is None:
                 # continuation (stack trace etc.) - only mine it for exception classes
                 for cls in RE_EXC.findall(line):
@@ -164,9 +217,11 @@ def scan_log(path, node, window):
                     excs[cls] = (dt, lineno)
 
             matched = False
-            for category, sev, rx in EVENTS:
+            for category, sev, rx in events_tbl:
                 if rx.search(msg):
                     counts[category] += 1
+                    if health is not None:
+                        health.recognised += 1
                     events.append({"node": node, "dt": dt, "level": level, "cat": category,
                                    "sev": sev, "thread": thread, "logger": cat,
                                    "msg": msg.strip(), "line": lineno,
@@ -187,13 +242,17 @@ def truncate(s, n):
     return s if len(s) <= n else s[:n - 1] + "..."
 
 
-def render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args, out):
+def render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args, out,
+           healths=None, overlay_path=None, overlay=None):
     w = out.write
     w("# 10 - Cluster timeline (Phase 1)\n\n")
     w("Source logs (%d):\n\n" % len(sources))
     for node, path, lines in sources:
         w("- **%s** - `%s` (%d lines)\n" % (node, path, lines))
     w("\n")
+
+    if healths is not None:
+        P.render_health(healths, out, overlay_path, overlay)
     if args.start or args.end:
         w("Window filter: %s .. %s\n\n" % (args.start or "(open)", args.end or "(open)"))
 
@@ -393,6 +452,9 @@ def main():
     ap.add_argument("--min-severity", type=int, default=2, choices=(1, 2, 3),
                     help="minimum severity in the merged timeline (default 2)")
     ap.add_argument("--max-events", type=int, default=200, help="cap on rows printed")
+    ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="report parse health and unparsed lines instead of the digest")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
 
@@ -421,15 +483,26 @@ def main():
               file=sys.stderr)
         return 1
 
+    try:
+        overlay, overlay_path = P.load_overlay(args.patterns, near=args.inventory or args.root)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+    layouts = overlay_layouts(overlay)
+    events_tbl = overlay_events(overlay)
+
     all_events, all_gaps, all_topo, all_cps = [], [], [], []
     all_excs = defaultdict(dict)
     counts = Counter()
     sources = []
+    healths = []
     for node, path in logs:
         if not path.is_file():
             print("warning: %s missing, skipped" % path, file=sys.stderr)
             continue
-        ev, gaps, topo, cps, excs, c = scan_log(path, node, window)
+        health = P.Health("%s/%s" % (node, path.name), "ignite_log")
+        healths.append(health)
+        ev, gaps, topo, cps, excs, c = scan_log(path, node, window, layouts, events_tbl, health)
         all_events += ev
         all_gaps += gaps
         all_topo += topo
@@ -440,12 +513,18 @@ def main():
             nlines = sum(1 for _ in fh)
         sources.append((node, path.name, nlines))
 
+    if args.diagnose:
+        P.render_diagnose(healths, sys.stdout, overlay_path, overlay)
+        return 0 if P.worst(healths) == P.OK else 2
+
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
-            render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args, fh)
+            render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args, fh,
+                   healths, overlay_path, overlay)
         print("wrote %s (%d events, %d gaps)" % (args.out, len(all_events), len(all_gaps)))
     else:
-        render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args, sys.stdout)
+        render(all_events, all_gaps, all_topo, all_cps, all_excs, counts, sources, args,
+               sys.stdout, healths, overlay_path, overlay)
 
     if args.json_out:
         payload = {"events": [{**e, "dt": e["dt"].isoformat()} for e in all_events],

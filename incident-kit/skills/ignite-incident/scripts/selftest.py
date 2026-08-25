@@ -167,10 +167,118 @@ def main():
     check("correlate: warns when no offsets were supplied", "No offsets were supplied" in co)
     check("correlate: excludes monotonic dmesg rows", "excluded" in co)
 
+    # ---- preflight on the good bundle ------------------------------------ #
+    pf_md = tmp / "00.5-preflight.md"
+    p = run("preflight", [str(HERE / "preflight.py"), "--inventory", str(inv_json),
+                          "--out", str(pf_md), "--json", str(tmp / "preflight.json")])
+    pf = pf_md.read_text(encoding="utf-8") if pf_md.exists() else ""
+    check("preflight.py runs", p.returncode in (0, 1, 2), p.stderr[:300])
+    check("preflight: good fixtures all parse cleanly",
+          "**DEGRADED**" not in pf and "**FAILED**" not in pf.split("## Completeness")[0]
+          .replace("## Verdict: **FAILED**", ""),
+          "a known-good fixture is being reported as unreadable")
+    check("preflight: banner/continuation lines do not count against parse rate",
+          "| `node01/ignite.log` | ignite_log | 26 | 26 | 100.0% |" in pf,
+          "the >>> startup banner is being counted as a parse failure")
+    check("preflight: no completeness gaps on good fixtures",
+          "No gaps: every high-signal literal" in pf)
+    check("preflight: blocks on the unclassified fixture",
+          p.returncode == 1 and "Unclassified files" in pf)
+
+    # ---- the alien bundle: parse failure must be LOUD --------------------- #
+    alien = SAMPLES.parent / "alien"
+    overlay = SAMPLES.parent / "alien-site-patterns.json"
+    a_inv = tmp / "alien-inventory.json"
+    p = run("identify-alien", [str(HERE / "identify.py"), str(alien), "--json", str(a_inv)])
+    check("alien: identify refuses unknown formats", p.returncode == 2,
+          "alien formats should not classify without an overlay")
+
+    a_pf = tmp / "alien-preflight.md"
+    run("preflight-alien", [str(HERE / "preflight.py"), "--inventory", str(a_inv),
+                            "--out", str(a_pf)])
+    apf = a_pf.read_text(encoding="utf-8") if a_pf.exists() else ""
+    check("alien: preflight reports FAILED", "## Verdict: **FAILED**" in apf)
+
+    # The core regression this whole feature exists to prevent.
+    q = run("os-alien", [str(HERE / "os_digest.py"),
+                         str(alien / "node09" / "messages-rfc5424")])
+    check("alien: unreadable syslog does NOT claim a negative finding",
+          "That is a real finding" not in q.stdout,
+          "os_digest is still presenting an unparsed file as evidence of absence")
+    check("alien: unreadable syslog says so explicitly",
+          "BUT THE FILES DID NOT PARSE" in q.stdout and "not a negative finding" in q.stdout)
+    check("alien: parse-problem banner fires", "PARSE PROBLEM" in q.stdout)
+
+    q = run("gc-alien", [str(HERE / "gc_digest.py"), str(alien / "node09" / "gc-jdk8.log")])
+    check("alien: JDK 8 GC log is rejected, not misread",
+          q.returncode == 1 and "JDK 8" in q.stderr)
+
+    # ---- the repair path -------------------------------------------------- #
+    r_inv = tmp / "repaired-inventory.json"
+    p = run("identify-repaired", [str(HERE / "identify.py"), str(alien),
+                                  "--patterns", str(overlay), "--json", str(r_inv)])
+    check("repair: overlay makes every alien file classify", p.returncode == 0,
+          "overlay did not resolve all unknowns")
+
+    r_pf = tmp / "repaired-preflight.md"
+    run("preflight-repaired", [str(HERE / "preflight.py"), "--inventory", str(r_inv),
+                               "--patterns", str(overlay), "--out", str(r_pf)])
+    rpf = r_pf.read_text(encoding="utf-8") if r_pf.exists() else ""
+    check("repair: alien Ignite log now parses fully",
+          "| `node09/ignite.log` | ignite_log | 10 | 10 | 100.0% |" in rpf,
+          "the overlay line layout is not being applied")
+    check("repair: overlay is named in the output", "Site-pattern overlay active" in rpf)
+    check("repair: identify skips its own artifacts",
+          "| `site-patterns.json` |" not in rpf and "| `inventory.json` |" not in rpf,
+          "kit output is being classified as evidence")
+
+    r_tl = tmp / "repaired-timeline.md"
+    run("timeline-repaired", [str(HERE / "ignite_timeline.py"), "--inventory", str(r_inv),
+                              "--patterns", str(overlay), "--out", str(r_tl)])
+    rtl = r_tl.read_text(encoding="utf-8") if r_tl.exists() else ""
+    for literal in ("Local node SEGMENTED", "Node FAILED", "18442"):
+        check("repair: timeline finds %r in the alien layout" % literal, literal in rtl,
+              "overlay-parsed log is not yielding events")
+    check("repair: alien logger field is extracted",
+          "o.a.i.i.m.d" in rtl,
+          "the overlay layout is not capturing the logger group")
+
+    q = run("os-repaired", [str(HERE / "os_digest.py"),
+                            str(alien / "node09" / "messages-rfc5424"),
+                            "--patterns", str(overlay)])
+    check("repair: overlay os_patterns catch vendor kernel wording",
+          "memory_reclaim" in q.stdout and "hung_task" in q.stdout)
+
+    q = run("nmon-repaired", [str(HERE / "nmon_digest.py"), str(alien / "node09" / "node09.nmon"),
+                              "--patterns", str(overlay)])
+    check("repair: nmon aliases map renamed sections",
+          "## CPU_ALL" in q.stdout and "## MEM" in q.stdout,
+          "nmon_aliases not applied")
+
+    # ---- a bad overlay must fail loudly, never be ignored ------------------ #
+    bad = tmp / "bad-patterns.json"
+    bad.write_text('{"ignite_events": [["x", 3, "(unclosed"]]}', encoding="utf-8")
+    q = run("bad-overlay", [str(HERE / "preflight.py"), "--inventory", str(inv_json),
+                            "--patterns", str(bad)])
+    check("a malformed overlay is rejected with the offending pattern named",
+          q.returncode == 1 and "bad regex" in q.stderr, q.stderr[:200])
+    bad2 = tmp / "bad-section.json"
+    bad2.write_text('{"not_a_section": []}', encoding="utf-8")
+    q = run("bad-section", [str(HERE / "preflight.py"), "--inventory", str(inv_json),
+                            "--patterns", str(bad2)])
+    check("an unknown overlay section is rejected, not silently ignored",
+          q.returncode == 1 and "unknown section" in q.stderr, q.stderr[:200])
+
+    # ---- --diagnose ------------------------------------------------------- #
+    q = run("diagnose", [str(HERE / "os_digest.py"),
+                         str(alien / "node09" / "messages-rfc5424"), "--diagnose"])
+    check("--diagnose shows the lines that did not parse",
+          "did not match the line grammar" in q.stdout and "<4>1" in q.stdout)
+
     # ---- --explain on every script --------------------------------------- #
     for script in sorted(HERE.glob("*.py")):
-        if script.name == "selftest.py":
-            continue
+        if script.name in ("selftest.py", "patterns.py"):
+            continue    # patterns.py is a shared library, not a CLI
         q = run("explain", [str(script), "--explain"])
         check("%s --explain works" % script.name,
               q.returncode == 0 and len(q.stdout) > 200, q.stderr[:200])

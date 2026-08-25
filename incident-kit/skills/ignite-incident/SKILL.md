@@ -30,6 +30,11 @@ holding everything in context.
    Establish the offsets in Phase 0 and never compare across them before you have.
 7. **State confidence.** Distinguish what the evidence proves from what you infer. An
    honest "the logs cannot tell us X" is worth more than a confident wrong chain.
+8. **A degraded parse is never a finding.** If a digest reports a low parse rate, its
+   output is incomplete by an unknown amount. You may not say a signal was absent, that
+   nothing was found, or that anything is ruled out, from a file that did not parse. Go to
+   `references/90-when-scripts-fail.md`. Reading raw log lines IS allowed there, bounded -
+   that is the one place in this workflow where it is the right move.
 
 ## Setup (once per incident)
 
@@ -55,8 +60,30 @@ Read `00-inventory.md`. Then fill in, in that file: the incident window and the 
 timezone, and the clock offsets between the artifacts.
 
 **Gate:** every file classified (exit code 0), and the incident window written down.
-If any file is `unknown`, follow the manual routine in `references/00-workflow.md`
-before continuing. Do not skip a file because it "looks unimportant".
+If any file is `unknown`, work `references/90-when-scripts-fail.md` before continuing. Do
+not skip a file because it "looks unimportant".
+
+## Phase 0.5 - Can the parsers actually read it?
+
+```sh
+python "$KIT/skills/ignite-incident/scripts/preflight.py" \
+    --inventory "$BUNDLE/analysis/inventory.json" \
+    --out "$BUNDLE/analysis/00.5-preflight.md" \
+    --json "$BUNDLE/analysis/preflight.json"
+```
+
+This runs the real parsers over the real files and reports what fraction of each one they
+understood, plus a completeness cross-check that catches events being dropped silently.
+It performs no analysis.
+
+Exit 0 = OK, 2 = DEGRADED, 1 = FAILED or files still unclassified.
+
+**Gate:** verdict `OK`, **or** every `DEGRADED`/`FAILED` file recorded in
+`00-inventory.md` together with what you will therefore not claim from it. On anything
+below OK, work `references/90-when-scripts-fail.md` first.
+
+Skipping this phase is how an analysis ends up confidently describing a cluster from a
+digest that read a third of the evidence.
 
 ## Phase 1 - What the cluster did
 
@@ -157,4 +184,5 @@ against every item. That list is the specific set of mistakes this analysis invi
 | `references/50-jfr-playbook.md` | Phase 4, if and only if JFR is justified |
 | `references/60-source-lookup.md` | going from a log line to Ignite source cheaply |
 | `references/70-antipatterns.md` | before writing the report - mandatory |
+| `references/90-when-scripts-fail.md` | any parse problem: the repair ladder and its limits |
 | `references/80-report-template.md` | writing the report |

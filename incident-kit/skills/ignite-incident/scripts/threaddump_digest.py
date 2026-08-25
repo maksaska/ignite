@@ -19,6 +19,9 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
 RE_HEADER = re.compile(r'^"(?P<name>.*)"\s+(?P<attrs>.*)$')
 RE_STATE = re.compile(r"java\.lang\.Thread\.State:\s*(?P<state>[A-Z_]+)"
                       r"(?:\s*\((?P<detail>[^)]*)\))?")
@@ -335,6 +338,9 @@ def main():
     ap.add_argument("--node")
     ap.add_argument("--out")
     ap.add_argument("--top", type=int, default=20, help="rows in the top-frame table")
+    ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="report parse health instead of the digest")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
 
@@ -347,12 +353,46 @@ def main():
         print("error: no thread dumps. Run identify.py and pass --inventory.", file=sys.stderr)
         return 1
 
+    try:
+        overlay, overlay_path = P.load_overlay(args.patterns, near=args.inventory)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+
+    parsed = [(p, parse_dump(p)) for p in paths]
+    healths = []
+    for p, (threads, dump_time, _vm) in parsed:
+        h = P.Health(p.name, "thread_dump")
+        with p.open("r", encoding="utf-8", errors="replace") as fh:
+            h.lines = sum(1 for line in fh if line.strip())
+        stated = sum(1 for t in threads if t.state)
+        h.recognised = len(threads)
+        h.parsed = h.lines if (threads and stated) else 0
+        if not threads:
+            h.note = "No threads parsed - is this jstack output?"
+            h.samples.append((None, "no line matched the jstack thread-header grammar"))
+        elif not stated:
+            h.note = "Thread headers matched but no java.lang.Thread.State lines did."
+            h.samples.append((None, "thread headers matched; state lines did not"))
+        else:
+            h.note = "%d threads, %d with a state, dump time %s" % (
+                len(threads), stated, dump_time or "NOT FOUND")
+        healths.append(h)
+
+    if args.diagnose:
+        P.render_diagnose(healths, sys.stdout, overlay_path, overlay)
+        return 0 if P.worst(healths) == P.OK else 2
+
     fh_out = open(args.out, "w", encoding="utf-8") if args.out else sys.stdout
     try:
-        for p in paths:
-            threads, dump_time, vm = parse_dump(p)
+        P.render_health(healths, fh_out, overlay_path, overlay)
+        for (p, (threads, dump_time, vm)), h in zip(parsed, healths):
             if not threads:
-                print("warning: %s contained no parseable threads" % p.name, file=sys.stderr)
+                # Surfaced in Markdown, not just stderr: a warning the model never sees
+                # is a warning that does not exist.
+                fh_out.write("## `%s`\n\nNo threads could be parsed from this file, so nothing "
+                             "below covers it. This is a parsing problem, not a finding about "
+                             "the JVM.\n\n" % p.name)
                 continue
             render(threads, dump_time, vm, p, args, fh_out)
     finally:

@@ -1,0 +1,4 @@
+2024-03-14T10:15:01.220983+03:00 node09 systemd[1]: Started Session 91002 of user root.
+2024-03-14T10:20:44.118002+03:00 node09 kernel: kswapd0: page allocation stalls for 12880ms, order:0
+2024-03-14T10:22:35.554120+03:00 node09 kernel: INFO: task java:41022 blocked for more than 20 seconds.
+2024-03-14T10:22:59.880114+03:00 node09 systemd[1]: ignite.service: Main process exited, code=exited, status=1/FAILURE

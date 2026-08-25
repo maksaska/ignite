@@ -19,6 +19,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
 # (label, severity, regex, why it matters)
 PATTERNS = [
     ("oom_kill", 3, re.compile(r"Out of memory: Kill|oom-kill:|Killed process|oom_reaper"),
@@ -85,19 +88,34 @@ def parse(line):
     return None, "none", None, line
 
 
-def scan(path, findings, ctx):
+def all_patterns(overlay):
+    """Site-local patterns first, then the built-in catalogue."""
+    extra = []
+    for row in (overlay or {}).get("os_patterns", []):
+        label, sev, rx = row[0], int(row[1]), re.compile(row[2])
+        why = row[3] if len(row) > 3 else "site-local pattern"
+        extra.append((label, sev, rx, why))
+    return extra + PATTERNS
+
+
+def scan(path, findings, ctx, pats=None, health=None):
+    pats = pats or PATTERNS
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         lines = fh.readlines()
     for i, raw in enumerate(lines):
         line = raw.rstrip("\n")
         stamp, kind, host, text = parse(line)
+        if health is not None and line.strip():
+            health.line(kind != "none", i + 1, line)
         if host:
             ctx["hosts"].add(host)
         ctx["clock_kinds"].add(kind)
         if "disables this message" in line:
             continue    # the kernel's own hint line that follows every hung-task report
-        for label, sev, rx, _why in PATTERNS:
+        for label, sev, rx, _why in pats:
             if rx.search(line):
+                if health is not None:
+                    health.recognised += 1
                 trace = []
                 if label in ("hung_task", "kernel_panic"):
                     # capture the following call trace, bounded
@@ -116,12 +134,15 @@ def scan(path, findings, ctx):
                 break
 
 
-def render(findings, ctx, args, out):
+def render(findings, ctx, args, out, healths=None, overlay_path=None, overlay=None):
     w = out.write
     w("# 20 - OS and kernel digest (Phase 2)\n\n")
     w("Files read: %s\n\n" % ", ".join("`%s`" % f for f in ctx["files"]))
     if ctx["hosts"]:
         w("Hosts seen: %s\n\n" % ", ".join(sorted(ctx["hosts"])))
+
+    if healths is not None:
+        P.render_health(healths, out, overlay_path, overlay)
 
     if "monotonic" in ctx["clock_kinds"]:
         w("> **Clock warning.** At least one input uses dmesg's monotonic clock (seconds\n"
@@ -132,11 +153,21 @@ def render(findings, ctx, args, out):
 
     total = sum(len(v) for v in findings.values())
     if not total:
+        # The distinction this whole block exists for: a clean file and an unreadable
+        # file both produce zero findings, and only one of them is evidence.
+        if healths is not None and not P.absence_is_safe(healths):
+            w("## Nothing matched - BUT THE FILES DID NOT PARSE\n\n")
+            w("**This is not a negative finding.** Zero matches here means the parser could\n"
+              "not read these files, not that the machine was healthy. Do not write that no\n"
+              "kernel events were found, and do not use this section to rule anything out.\n\n"
+              "Work `references/90-when-scripts-fail.md`, then re-run. See the parse health\n"
+              "table above for which files failed and what their lines look like.\n\n")
+            return
         w("## Nothing matched\n\n")
         w("No OOM kills, reclaim stalls, hung tasks, network, storage or clock events were\n"
-          "found. That is a real finding: it argues against a machine-level cause, *within\n"
-          "the coverage of these files*. Check in `00-inventory.md` that the files actually\n"
-          "span the incident window before relying on it.\n\n")
+          "found. The files parsed cleanly, so this **is** a real finding: it argues against a\n"
+          "machine-level cause, *within the coverage of these files*. Check in\n"
+          "`00-inventory.md` that they actually span the incident window before relying on it.\n\n")
         return
 
     w("## Summary\n\n| signal | count | first | last | severity |\n|---|---|---|---|---|\n")
@@ -237,6 +268,9 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--json", dest="json_out")
     ap.add_argument("--per-signal", type=int, default=8, help="sample lines per signal")
+    ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="report parse health and unparsed lines instead of the digest")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
 
@@ -250,20 +284,34 @@ def main():
               file=sys.stderr)
         return 1
 
+    try:
+        overlay, overlay_path = P.load_overlay(args.patterns, near=args.inventory)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+    pats = all_patterns(overlay)
+
     findings = defaultdict(list)
     ctx = {"files": [], "hosts": set(), "clock_kinds": set()}
+    healths = []
     for p in paths:
         if not p.is_file():
             continue
         ctx["files"].append(p.name)
-        scan(p, findings, ctx)
+        health = P.Health(p.name)
+        healths.append(health)
+        scan(p, findings, ctx, pats, health)
+
+    if args.diagnose:
+        P.render_diagnose(healths, sys.stdout, overlay_path, overlay)
+        return 0 if P.worst(healths) == P.OK else 2
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
-            render(findings, ctx, args, fh)
+            render(findings, ctx, args, fh, healths, overlay_path, overlay)
         print("wrote %s (%d findings)" % (args.out, sum(len(v) for v in findings.values())))
     else:
-        render(findings, ctx, args, sys.stdout)
+        render(findings, ctx, args, sys.stdout, healths, overlay_path, overlay)
 
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(

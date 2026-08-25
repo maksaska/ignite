@@ -1,0 +1,9 @@
+2024-03-14T10:19:44.220+0300: 1289.132: [GC pause (G1 Evacuation Pause) (young), 0.0481120 secs]
+   [Parallel Time: 44.1 ms, GC Workers: 8]
+   [Eden: 3072.0M(3072.0M)->0.0B(2867.0M) Survivors: 205.0M->410.0M Heap: 18432.0M(32768.0M)->9216.0M(32768.0M)]
+ [Times: user=0.68 sys=0.02, real=0.05 secs]
+2024-03-14T10:20:31.870+0300: 1336.782: [GC pause (G1 Evacuation Pause) (young), 0.0554010 secs]
+   [Parallel Time: 51.2 ms, GC Workers: 8]
+   [Eden: 3072.0M(3072.0M)->0.0B(2867.0M) Survivors: 410.0M->410.0M Heap: 18944.0M(32768.0M)->9420.0M(32768.0M)]
+ [Times: user=0.74 sys=0.03, real=0.06 secs]
+Total time for which application threads were stopped: 0.0561230 seconds, Stopping threads took: 0.0001880 seconds

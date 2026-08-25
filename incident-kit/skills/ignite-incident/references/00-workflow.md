@@ -39,27 +39,44 @@ use `messages` for kernel events instead, since it carries wall clock.
 
 ### When a file is `unknown`
 
-Do not ignore it and do not guess from its name.
+Do not ignore it and do not guess from its name. This is the same repair ladder as any
+other parse problem, so work `references/90-when-scripts-fail.md`: read the file within
+the stated limits, add a `file_signatures` entry to `site-patterns.json`, re-run, and
+verify with `preflight.py` **and** `selftest.py`.
 
-1. Look at its start and end:
-   ```sh
-   head -50 <file>; echo '...'; tail -50 <file>
-   ```
-2. Decide what it is. Common things the classifier does not know: vendor-specific
-   collector output, application logs from a co-located service, JVM flag dumps in an
-   unusual format, `jcmd` output, heap histograms, plugin logs.
-3. If it is relevant, add a signature so the next run classifies it. Create or edit
-   `signatures.local.json` next to the bundle:
-   ```json
-   {
-     "ignite_log": [["MyCompanyIgniteWrapper", 6]],
-     "vendor_gc": [["\\[GC concurrent-", 8]]
-   }
-   ```
-   Format: `{"kind": [[regex, weight], ...]}`. Weights add up; 6 is the threshold.
-   Re-run with `--signatures signatures.local.json`.
-4. If it is not relevant, record in `00-inventory.md` what it is and why you are
-   excluding it. "Not examined" must be a decision, not an omission.
+Things the classifier commonly does not know: vendor collector output, application logs
+from a co-located service, unusual JVM flag dumps, `jcmd` output, heap histograms, plugin
+logs.
+
+If a file turns out not to be relevant, record in `00-inventory.md` what it is and why you
+are excluding it. "Not examined" must be a decision, not an omission.
+
+---
+
+## Phase 0.5 - Can the parsers read it?
+
+**Goal:** know how much of each file the tooling actually understood, before any of it is
+interpreted.
+
+**Do:** run `preflight.py` with `--out` and `--json`. Read the parse-health table and the
+completeness cross-check.
+
+**Why it is separate from Phase 0:** Phase 0 answers *what is this file*. Phase 0.5
+answers *can we read it*. A file can classify perfectly and still parse at 12%.
+
+The two failure shapes it distinguishes:
+
+- **Low parse rate** - the line grammar differs (a different log4j layout, RFC5424 syslog
+  framing, renamed nmon sections). Fix `ignite_line_layouts` / `file_signatures`.
+- **Parse rate 100% but completeness gaps** - the lines parse, but the content patterns
+  miss this site's wording, so events are dropped silently. Fix `ignite_events` /
+  `os_patterns`. Parse rate alone cannot see this, which is why the cross-check exists.
+
+**Gate:** verdict `OK`, or every degraded file recorded in `00-inventory.md` with what
+will not be claimed from it.
+
+Do not treat a partial parse as "good enough to get started". The digests downstream give
+no indication that they read a third of the evidence, and neither will your report.
 
 ---
 

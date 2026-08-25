@@ -35,7 +35,13 @@ from asking an artifact a question it cannot answer.
 
 ## Absence as evidence
 
-Missing signals constrain hypotheses, so state them:
+**Precondition, no exceptions:** an absence claim is only valid for a file whose parse
+health is `OK`. Check the parse-health table in the digest, or `00.5-preflight.md`, before
+writing any of the statements below. "The parser found nothing" and "the parser could not
+read the file" produce the same empty output; only the parse rate separates them, and
+mistaking one for the other turns a tooling failure into a confident wrong conclusion.
+
+With that established, missing signals constrain hypotheses, so state them:
 
 - No `Blocked system-critical thread` during a long stall -> either the watchdog thread was
   stopped too (whole-JVM freeze), or `systemWorkerBlockedTimeout` is higher than the stall.
@@ -45,6 +51,9 @@ Missing signals constrain hypotheses, so state them:
 - No JFR samples in a window -> the JVM was not running threads.
 - nmon shows nothing -> **if the event was shorter than the sample interval, this proves
   nothing at all.** Say so explicitly rather than reporting "resources were normal".
+- A digest section is empty and its file's parse health is not `OK` -> this is not an
+  absence at all. See `90-when-scripts-fail.md`; report it under "Collection gaps", not
+  under findings.
 
 ---
 

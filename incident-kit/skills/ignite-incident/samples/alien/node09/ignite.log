@@ -1,0 +1,10 @@
+2024-03-14 10:19:02,110 INFO  [main] o.a.i.i.IgniteKernal - Config URL: file:/opt/ignite/config/ignite-config.xml
+2024-03-14 10:19:04,331 INFO  [disco-event-worker-#61] o.a.i.i.m.d.GridDiscoveryManager - Topology snapshot [ver=7, locNode=f9e8d7c6, servers=4, clients=1, state=ACTIVE, CPUs=128, offheap=192.0GB, heap=128.0GB]
+2024-03-14 10:20:02,441 INFO  [db-checkpoint-thread-#79] o.a.i.i.p.c.p.c.Checkpointer - Checkpoint started [checkpointId=aa1c2a30-0009-4c11-9a01-000000000009, checkpointLockWait=0ms, checkpointLockHoldTime=54ms, pages=19022, reason='timeout']
+2024-03-14 10:20:05,902 INFO  [db-checkpoint-thread-#79] o.a.i.i.p.c.p.c.Checkpointer - Checkpoint finished [cpId=aa1c2a30-0009-4c11-9a01-000000000009, pages=19022, markDuration=54ms, pagesWrite=2140ms, fsync=1180ms, total=3461ms]
+2024-03-14 10:22:41,455 WARN  [tcp-disco-msg-worker-[crd]-#2] o.a.i.s.d.t.TcpDiscoverySpi - Socket write has timed out (consider increasing 'IgniteConfiguration.failureDetectionTimeout' configuration property) [failureDetectionTimeout=10000, rmtAddr=/10.20.30.19:47500, rmtPort=47500, sockTimeout=5000]
+2024-03-14 10:22:41,690 WARN  [disco-event-worker-#61] o.a.i.i.m.d.GridDiscoveryManager - Node FAILED: TcpDiscoveryNode [id=f9e8d7c6-9999-4a2b-9c3d-000000000009, consistentId=node09, addrs=[10.20.30.19], order=7, intOrder=7, isClient=false]
+2024-03-14 10:22:41,701 INFO  [disco-event-worker-#61] o.a.i.i.m.d.GridDiscoveryManager - Topology snapshot [ver=8, locNode=f9e8d7c6, servers=3, clients=1, state=ACTIVE, CPUs=96, offheap=144.0GB, heap=96.0GB]
+2024-03-14 10:22:53,995 WARN  [jvm-pause-detector-worker] o.a.i.i.LongJVMPauseDetector - Possible too long JVM pause: 18442 milliseconds.
+2024-03-14 10:22:54,118 WARN  [disco-event-worker-#61] o.a.i.i.m.d.GridDiscoveryManager - Local node SEGMENTED: TcpDiscoveryNode [id=f9e8d7c6-9999-4a2b-9c3d-000000000009, consistentId=node09, addrs=[10.20.30.19], order=7, intOrder=7, isClient=false]
+2024-03-14 10:22:54,140 ERROR [disco-event-worker-#61] o.a.i.f.StopNodeOrHaltFailureHandler - JVM will be halted immediately due to the failure: [failureCtx=FailureContext [type=SEGMENTATION, err=null]]

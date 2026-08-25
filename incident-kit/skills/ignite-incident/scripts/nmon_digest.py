@@ -20,6 +20,9 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patterns as P                                      # noqa: E402
+
 RE_AAA = re.compile(r"^AAA,(\w+),(.*)$")
 RE_ZZZZ = re.compile(r"^ZZZZ,(T\d+),(\d{2}:\d{2}:\d{2}),(\d{2}-[A-Z]{3}-\d{4})")
 RE_DATA = re.compile(r"^([A-Z][A-Z0-9_]*),(T\d+),(.*)$")
@@ -53,7 +56,17 @@ INTEREST = {
 }
 
 
-def parse_nmon(path):
+def alias_map(overlay):
+    """{alias_section: canonical_section} from the overlay's nmon_aliases."""
+    out = {}
+    for canonical, aliases in (overlay or {}).get("nmon_aliases", {}).items():
+        for a in aliases:
+            out[a] = canonical
+    return out
+
+
+def parse_nmon(path, overlay=None):
+    aliases = alias_map(overlay)
     meta = {}
     times = {}
     headers = {}
@@ -82,11 +95,13 @@ def parse_nmon(path):
                 sect, snap, rest = m.groups()
                 if sect in ("ZZZZ", "AAA", "BBB"):
                     continue
+                sect = aliases.get(sect, sect)
                 data[sect][snap] = rest.split(",")
                 continue
             m = RE_HEADER.match(line)
             if m:
                 sect, _title, cols = m.groups()
+                sect = aliases.get(sect, sect)
                 if sect not in headers:
                     headers[sect] = [c.strip() for c in cols.split(",")]
     return meta, times, headers, data
@@ -334,6 +349,9 @@ def main():
     ap.add_argument("--node")
     ap.add_argument("--out")
     ap.add_argument("--rows", type=int, default=15, help="sampled rows per section")
+    ap.add_argument("--patterns", help="site-patterns.json overlay")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="report parse health instead of the digest")
     ap.add_argument("--explain", action="store_true")
     args = ap.parse_args()
 
@@ -346,12 +364,45 @@ def main():
         print("error: no nmon files. Run identify.py and pass --inventory.", file=sys.stderr)
         return 1
 
+    try:
+        overlay, overlay_path = P.load_overlay(args.patterns, near=args.inventory)
+    except P.OverlayError as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 1
+
+    parsed = [(p, parse_nmon(p, overlay)) for p in paths]
+    healths = []
+    for p, (meta, times, headers, data) in parsed:
+        h = P.Health(p.name, "nmon")
+        with p.open("r", encoding="utf-8", errors="replace") as fh:
+            h.lines = sum(1 for line in fh if line.strip())
+        known = sum(len(v) for v in data.values()) + len(times) + len(meta) + len(headers)
+        h.parsed = min(known, h.lines)
+        usable = [s for s in data if s in INTEREST]
+        h.recognised = len(usable)
+        if not usable:
+            h.note = ("No usable resource sections%s. If this capture uses non-standard "
+                      "section names, map them with nmon_aliases in site-patterns.json."
+                      % (" (found: %s)" % ", ".join(sorted(data)) if data else ""))
+            h.parsed = 0
+        else:
+            h.note = "usable sections: %s" % ", ".join(sorted(usable))
+        healths.append(h)
+
+    if args.diagnose:
+        P.render_diagnose(healths, sys.stdout, overlay_path, overlay)
+        return 0 if P.worst(healths) == P.OK else 2
+
     fh_out = open(args.out, "w", encoding="utf-8") if args.out else sys.stdout
     try:
-        for p in paths:
-            meta, times, headers, data = parse_nmon(p)
+        P.render_health(healths, fh_out, overlay_path, overlay)
+        for (p, (meta, times, headers, data)), h in zip(parsed, healths):
             if not data:
-                print("warning: %s parsed no data sections" % p.name, file=sys.stderr)
+                # Surfaced in Markdown, not just stderr: a warning the model never sees
+                # is a warning that does not exist.
+                fh_out.write("## `%s`\n\nNo nmon data sections were recognised in this file, so "
+                             "nothing below covers it. This is a parsing problem, not a finding "
+                             "about the machine.\n\n" % p.name)
                 continue
             render(meta, times, headers, data, args, fh_out)
     finally:
