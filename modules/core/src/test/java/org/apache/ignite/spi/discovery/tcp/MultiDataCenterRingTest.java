@@ -19,12 +19,15 @@ package org.apache.ignite.spi.discovery.tcp;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteSystemProperties;
 import org.apache.ignite.Ignition;
+import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.util.typedef.G;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteInClosure;
@@ -111,6 +114,34 @@ public class MultiDataCenterRingTest extends GridCommonAbstractTest {
         }
 
         assertEquals(2, hops);
+    }
+
+    /**
+     * Checks that the oldest remaining server takes over when the coordinator leaves. The coordinator is chosen
+     * by node order regardless of data centers, so this guards against a data center aware choice slipping in.
+     */
+    @Test
+    public void testCoordinatorChange() throws Exception {
+        int cnt = 6;
+
+        generateRandomDcOrderCluster(cnt);
+
+        UUID crdId = ((TcpDiscoverySpi)grid(0).configuration().getDiscoverySpi()).getCoordinator();
+
+        stopGrid(Ignition.ignite(crdId).name());
+
+        waitForTopology(cnt - 1);
+
+        ClusterNode oldest = G.allGrids().stream()
+            .map(node -> node.cluster().localNode())
+            .min(Comparator.comparingLong(ClusterNode::order))
+            .orElseThrow();
+
+        for (Ignite node : G.allGrids()) {
+            TcpDiscoverySpi disco = (TcpDiscoverySpi)node.configuration().getDiscoverySpi();
+
+            assertEquals("Unexpected coordinator on " + node.name(), oldest.id(), disco.getCoordinator());
+        }
     }
 
     /** */

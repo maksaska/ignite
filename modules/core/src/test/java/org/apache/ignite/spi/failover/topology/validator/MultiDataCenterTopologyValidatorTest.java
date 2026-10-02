@@ -25,6 +25,8 @@ import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteSystemProperties;
 import org.apache.ignite.cache.CacheMode;
+import org.apache.ignite.cache.affinity.rendezvous.MdcAffinityBackupFilter;
+import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
 import org.apache.ignite.cluster.ClusterState;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.DataRegionConfiguration;
@@ -35,6 +37,7 @@ import org.apache.ignite.internal.IgniteEx;
 import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 import org.apache.ignite.topology.MdcTopologyValidator;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /** */
@@ -47,6 +50,15 @@ public class MultiDataCenterTopologyValidatorTest extends GridCommonAbstractTest
 
     /** */
     private static final String DC_ID_2 = "DC2";
+
+    /** Data center outside the validator's set. */
+    private static final String DC_ID_OUTSIDE = "DC3";
+
+    /** */
+    private static final String CACHE_NAME = "cache";
+
+    /** */
+    private static final int KEYS_CNT = 100;
 
     /** */
     private static final String KEY = "key";
@@ -304,6 +316,179 @@ public class MultiDataCenterTopologyValidatorTest extends GridCommonAbstractTest
 
         // Checking case when 4 nodes are alive, but only in single DC
         GridTestUtils.assertThrows(log, () -> cache.put(KEY, VAL + 2), IgniteException.class, "cache topology is not valid");
+    }
+
+    /**
+     * Checks the loss and return of the main data center: the other data center rejects writes but reads
+     * every key from its backups, and after the main data center returns the copies are equal.
+     */
+    @Test
+    public void testMainDcLossAndReturn() throws Exception {
+        MdcTopologyValidator topValidator = new MdcTopologyValidator();
+
+        topValidator.setDatacenters(Set.of(DC_ID_0, DC_ID_1));
+        topValidator.setMainDatacenter(DC_ID_0);
+
+        startDataCenter(DC_ID_0, 0, 1);
+        IgniteEx srv = startDataCenter(DC_ID_1, 2, 3);
+
+        waitForTopology(4);
+
+        srv.cluster().state(ClusterState.ACTIVE);
+
+        IgniteCache<Integer, Integer> cache = srv.createCache(partitionedCacheConfiguration(topValidator, 2, 1));
+
+        for (int i = 0; i < KEYS_CNT; i++)
+            cache.put(i, i);
+
+        stopGrid(0);
+        stopGrid(1);
+
+        awaitPartitionMapExchange();
+
+        assertWritesRejected(cache);
+        assertAllKeysReadable(cache);
+
+        startDataCenter(DC_ID_0, 0, 1);
+
+        awaitPartitionMapExchange();
+
+        cache.put(KEYS_CNT, KEYS_CNT);
+
+        assertPartitionsSame(idleVerify(srv, CACHE_NAME));
+
+        assertAllKeysReadable(grid(0).cache(CACHE_NAME));
+    }
+
+    /**
+     * Checks that after the majority of data centers is lost the remaining one rejects writes but reads every key
+     * written before.
+     */
+    @Test
+    public void testReadAfterMajorityLoss() throws Exception {
+        MdcTopologyValidator topValidator = new MdcTopologyValidator();
+
+        topValidator.setDatacenters(Set.of(DC_ID_0, DC_ID_1, DC_ID_2));
+
+        IgniteEx srv = startDataCenter(DC_ID_0, 0, 1);
+        startDataCenter(DC_ID_1, 2, 3);
+        startDataCenter(DC_ID_2, 4, 5);
+
+        waitForTopology(6);
+
+        srv.cluster().state(ClusterState.ACTIVE);
+
+        IgniteCache<Integer, Integer> cache = srv.createCache(partitionedCacheConfiguration(topValidator, 3, 2));
+
+        for (int i = 0; i < KEYS_CNT; i++)
+            cache.put(i, i);
+
+        for (int i = 2; i < 6; i++)
+            stopGrid(i);
+
+        awaitPartitionMapExchange();
+
+        assertWritesRejected(cache);
+        assertAllKeysReadable(cache);
+    }
+
+    /**
+     * Checks that majority mode counts only the configured data centers: a side holding one of three configured
+     * data centers and a data center outside the set has no majority.
+     */
+    @Test
+    @Ignore("https://issues.apache.org/jira/browse/IGNITE-TBD")
+    public void testMajorityIgnoresDcOutsideConfiguredSet() throws Exception {
+        MdcTopologyValidator topValidator = new MdcTopologyValidator();
+
+        topValidator.setDatacenters(Set.of(DC_ID_0, DC_ID_1, DC_ID_2));
+
+        startDataCenter(DC_ID_0, 0);
+        IgniteEx srv = startDataCenter(DC_ID_1, 1);
+        startDataCenter(DC_ID_OUTSIDE, 2);
+
+        waitForTopology(3);
+
+        srv.cluster().state(ClusterState.ACTIVE);
+
+        IgniteCache<Object, Object> cache = srv.createCache(new CacheConfiguration<>(CACHE_NAME)
+            .setTopologyValidator(topValidator)
+            .setCacheMode(CacheMode.REPLICATED));
+
+        cache.put(KEY, VAL);
+
+        stopGrid(0);
+
+        awaitPartitionMapExchange();
+
+        GridTestUtils.assertThrows(log, () -> cache.put(KEY, VAL + 1), IgniteException.class, "cache topology is not valid");
+    }
+
+    /**
+     * Checks that the configuration check rejects an even set of data centers without a main one: after a split
+     * between two halves neither of them could write.
+     */
+    @Test
+    @Ignore("https://issues.apache.org/jira/browse/IGNITE-TBD")
+    public void testEvenDcsWithoutMain() {
+        MdcTopologyValidator topValidator = new MdcTopologyValidator();
+
+        topValidator.setDatacenters(Set.of(DC_ID_0, DC_ID_1));
+
+        GridTestUtils.assertThrows(log, () -> createClusterWithCache(topValidator, false), CacheException.class, null);
+    }
+
+    /**
+     * Starts servers in a data center.
+     *
+     * @param dcId Data center ID.
+     * @param idxs Node indexes.
+     * @return The first started node.
+     */
+    private IgniteEx startDataCenter(String dcId, int... idxs) throws Exception {
+        System.setProperty(IgniteSystemProperties.IGNITE_DATA_CENTER_ID, dcId);
+
+        IgniteEx first = null;
+
+        for (int idx : idxs) {
+            IgniteEx ignite = startGrid(idx);
+
+            if (first == null)
+                first = ignite;
+        }
+
+        return first;
+    }
+
+    /**
+     * @param topValidator Topology validator.
+     * @param dcsNum Number of data centers.
+     * @param backups Number of backups, one copy per data center.
+     * @return Configuration of a partitioned cache keeping a copy of every partition in each data center.
+     */
+    private CacheConfiguration<Integer, Integer> partitionedCacheConfiguration(
+        TopologyValidator topValidator,
+        int dcsNum,
+        int backups
+    ) {
+        return new CacheConfiguration<Integer, Integer>(CACHE_NAME)
+            .setTopologyValidator(topValidator)
+            .setCacheMode(CacheMode.PARTITIONED)
+            .setBackups(backups)
+            .setAffinity(new RendezvousAffinityFunction(false, 64)
+                .setAffinityBackupFilter(new MdcAffinityBackupFilter(dcsNum, backups)));
+    }
+
+    /** */
+    private void assertWritesRejected(IgniteCache<Integer, Integer> cache) {
+        GridTestUtils.assertThrows(log, () -> cache.put(0, -1), IgniteException.class, "cache topology is not valid");
+        GridTestUtils.assertThrows(log, () -> cache.put(KEYS_CNT, KEYS_CNT), IgniteException.class, "cache topology is not valid");
+    }
+
+    /** */
+    private void assertAllKeysReadable(IgniteCache<Integer, Integer> cache) {
+        for (int i = 0; i < KEYS_CNT; i++)
+            assertEquals("Unexpected value of key " + i, (Integer)i, cache.get(i));
     }
 
     /** */
