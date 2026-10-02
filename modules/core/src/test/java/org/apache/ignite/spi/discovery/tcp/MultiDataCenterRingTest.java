@@ -118,17 +118,29 @@ public class MultiDataCenterRingTest extends GridCommonAbstractTest {
 
     /**
      * Checks that the oldest remaining server takes over when the coordinator leaves. The coordinator is chosen
-     * by node order regardless of data centers, so this guards against a data center aware choice slipping in.
+     * by node order regardless of data centers, so this guards against a data center aware choice slipping in:
+     * the data centers alternate, so the oldest remaining server is in the other data center than the old
+     * coordinator, while a younger server shares its data center.
      */
     @Test
     public void testCoordinatorChange() throws Exception {
         int cnt = 6;
 
-        generateRandomDcOrderCluster(cnt);
+        for (int i = 0; i < cnt; i++) {
+            System.setProperty(IgniteSystemProperties.IGNITE_DATA_CENTER_ID, i % 2 == 0 ? DC_ID_0 : DC_ID_1);
+
+            startGrid(i);
+        }
+
+        waitForTopology(cnt);
 
         UUID crdId = ((TcpDiscoverySpi)grid(0).configuration().getDiscoverySpi()).getCoordinator();
 
-        stopGrid(Ignition.ignite(crdId).name());
+        Ignite crd = Ignition.ignite(crdId);
+
+        assertEquals(DC_ID_0, crd.cluster().localNode().dataCenterId());
+
+        stopGrid(crd.name());
 
         waitForTopology(cnt - 1);
 
@@ -136,6 +148,8 @@ public class MultiDataCenterRingTest extends GridCommonAbstractTest {
             .map(node -> node.cluster().localNode())
             .min(Comparator.comparingLong(ClusterNode::order))
             .orElseThrow();
+
+        assertEquals(DC_ID_1, oldest.dataCenterId());
 
         for (Ignite node : G.allGrids()) {
             TcpDiscoverySpi disco = (TcpDiscoverySpi)node.configuration().getDiscoverySpi();
