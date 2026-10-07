@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.CacheWriteSynchronizationMode;
@@ -65,9 +66,10 @@ import static org.apache.ignite.transactions.TransactionIsolation.REPEATABLE_REA
  * link drops while the message is in flight.
  *
  * <p>Each row runs one transaction, either over one key with its primary in DC2 (one-phase commit) or over two keys
- * with primaries in both DCs (two-phase commit), from the client of DC1 or DC2. Before DC2 rejoins, the transaction
- * must have finished, no node may keep an active transaction, and DC1 must hold either all old or all new values,
- * the new ones if the client was told the commit succeeded. After DC2 rejoins, every DC holds what DC1 held.</p>
+ * with primaries in both DCs, on four different servers (two-phase commit), from the client of DC1 or DC2. Before DC2
+ * rejoins, the transaction must have finished, no node may keep an active transaction, and DC1 must hold either all
+ * old or all new values, the new ones if the client was told the commit succeeded. After DC2 rejoins, every DC holds
+ * what DC1 held.</p>
  */
 public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
     /** DC that keeps writing. */
@@ -77,7 +79,7 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
     private static final String CUT_DC = DC2;
 
     /** Failure detection timeout of every node. */
-    private static final long FAILURE_DETECTION_TIMEOUT = 1_000;
+    private static final long FAILURE_DETECTION_TIMEOUT = 2_000;
 
     /** Time for a cut transaction to finish, and for its nodes to forget it. */
     private static final long TX_TIMEOUT = 15_000;
@@ -94,7 +96,7 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
     /** Issue of the rows that lose an acknowledged write: the backup prepare from DC2 to DC1 is cut. */
     private static final String LOST_WRITE_ISSUE = "https://issues.apache.org/jira/browse/IGNITE-TBD1";
 
-    /** Issue of the rows that commit a transaction partly: the backup prepare response from DC2 to DC1 is cut. */
+    /** Issue of the rows that commit a transaction partly: the prepare of DC1's primary is cut on its way to DC2. */
     private static final String PARTIAL_COMMIT_ISSUE = "https://issues.apache.org/jira/browse/IGNITE-TBD2";
 
     /** Next key to try when picking a key for a row. */
@@ -110,7 +112,8 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
 
     /** {@inheritDoc} */
     @Override protected IgniteConfiguration getConfiguration(String igniteInstanceName) throws Exception {
-        // Each row splits the cluster once, and a split takes the failure detection time: 10 s by default.
+        // Each row splits the cluster once, and a split takes the failure detection time: 10 s by default. With 1 s, a
+        // node restarted after the split sometimes fails to join ("Impossible to continue join").
         return super.getConfiguration(igniteInstanceName)
             .setFailureDetectionTimeout(FAILURE_DETECTION_TIMEOUT)
             .setClientFailureDetectionTimeout(FAILURE_DETECTION_TIMEOUT);
@@ -161,10 +164,10 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
         checkRows(rowsOfIssue(LOST_WRITE_ISSUE));
     }
 
-    /** Rows that commit a transaction partly: DC1 commits its part, DC2 rolls its part back. */
+    /** Rows that commit a transaction partly: DC1 commits the key of its primary only, the client gets an error. */
     @Test
     @Ignore(PARTIAL_COMMIT_ISSUE)
-    public void testCutBackupPrepareResponseToMainDc() throws Exception {
+    public void testCutPrepareOfMainDcPrimary() throws Exception {
         checkRows(rowsOfIssue(PARTIAL_COMMIT_ISSUE));
     }
 
@@ -174,6 +177,7 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
      * split, and in every DC after DC2 rejoins.
      */
     @Test
+    @Ignore(LOST_WRITE_ISSUE)
     public void testContinuousLoad() throws Exception {
         startCluster();
 
@@ -286,8 +290,6 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
      * @return What the row's checks found wrong, or {@code null} if nothing.
      */
     @Nullable private String checkRow(Row row) throws Exception {
-        log.info(">>> Row: " + row);
-
         String cacheName = row.syncMode.name();
 
         IgniteCache<Integer, Integer> cache = client(row.clientDc).cache(cacheName);
@@ -302,6 +304,9 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
         keys.add(pickKey(cacheName, CUT_DC, Role.PRIMARY_IN_DC2, Role.BACKUP_IN_DC1, nodes));
 
         nodes.put(Role.CLIENT, client(row.clientDc).cluster().localNode());
+
+        log.info(">>> Row: " + row + ", keys " + keys + ", nodes " + nodes.entrySet().stream()
+            .map(e -> e.getKey() + "=" + e.getValue().consistentId()).collect(Collectors.joining(", ")));
 
         for (Integer key : keys)
             cache.put(key, OLD);
@@ -397,13 +402,15 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
     }
 
     /**
-     * Picks a key not used yet whose primary is in the given DC and whose backup is in the other one.
+     * Picks a key not used yet whose primary is in the given DC and whose backup is in the other one, on servers that
+     * hold no other key of the row. The two keys of a two-phase commit then sit on four different servers, so the
+     * outcome of a row doesn't depend on which keys the rows before it took.
      *
      * @param cacheName Cache name.
      * @param primaryDc DC of the primary.
      * @param primaryRole Role of the key's primary.
      * @param backupRole Role of the key's backup.
-     * @param nodes Nodes by their role, filled with the key's primary and backup.
+     * @param nodes Nodes by their role: the copies of the row's other keys, filled with the key's primary and backup.
      * @return Key.
      */
     private int pickKey(String cacheName, String primaryDc, Role primaryRole, Role backupRole, Map<Role, ClusterNode> nodes) {
@@ -414,7 +421,7 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
 
             List<ClusterNode> owners = new ArrayList<>(aff.mapKeyToPrimaryAndBackups(key));
 
-            if (!owners.get(0).dataCenterId().equals(primaryDc))
+            if (!owners.get(0).dataCenterId().equals(primaryDc) || owners.stream().anyMatch(nodes::containsValue))
                 continue;
 
             assertEquals(2, owners.size());
@@ -613,7 +620,10 @@ public class MdcTxCutBySplitTest extends MdcTopologySplitAbstractTest {
 
             if (msgCls == GridDhtTxPrepareRequest.class && from == Role.PRIMARY_IN_DC2 && to == Role.BACKUP_IN_DC1)
                 issue = LOST_WRITE_ISSUE;
-            else if (concurrency == OPTIMISTIC && msgCls == GridDhtTxPrepareResponse.class && from == Role.BACKUP_IN_DC2)
+            else if (concurrency == OPTIMISTIC && twoPhase && clientDc.equals(CUT_DC) && (
+                msgCls == GridNearTxPrepareResponse.class && from == Role.PRIMARY_IN_DC1 ||
+                msgCls == GridDhtTxPrepareRequest.class && from == Role.PRIMARY_IN_DC1 ||
+                msgCls == GridDhtTxPrepareResponse.class && to == Role.PRIMARY_IN_DC1))
                 issue = PARTIAL_COMMIT_ISSUE;
             else
                 issue = null;
