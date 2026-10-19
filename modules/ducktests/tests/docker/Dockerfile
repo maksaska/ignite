@@ -169,9 +169,15 @@ ARG USER_GID=1000
 # Remove conflicting default user if it exists
 RUN getent passwd ubuntu &>/dev/null && userdel -r ubuntu || true
 
-# Provision ducker system environment and security configurations
-RUN groupadd -g $USER_GID ducker \
-    && useradd -u $USER_UID -g $USER_GID -ms /bin/bash ducker \
+# A uid of 0 means the image is built for a rootless Docker daemon (see ducker-ignite): there the
+# host user is container root, and no other container uid reaches the bind-mounted checkout. Root
+# already owns uid and gid 0, so ducker joins them rather than getting its own pair.
+RUN if [ "${USER_UID}" = "0" ]; then \
+        useradd -o -u 0 -g 0 -ms /bin/bash ducker; \
+    else \
+        groupadd -g "${USER_GID}" ducker \
+        && useradd -u "${USER_UID}" -g "${USER_GID}" -ms /bin/bash ducker; \
+    fi \
     && mkdir -p /home/ducker/ \
     && rsync -aiq /root/.ssh/ /home/ducker/.ssh \
     && chown -R ducker /home/ducker/ /mnt/ /var/log/ /opt \
