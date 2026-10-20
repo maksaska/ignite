@@ -77,7 +77,11 @@ class DiskFullTest(IgniteTest):
 
         load = self.__start_load_client(ignite)
 
+        self.pause("cluster-up", LogVolumes(ignite, load))
+
         fill_volume(ignite, ignite.log_dir)
+
+        self.pause("volume-full", LogVolumes(ignite, load))
 
         check_serves_load_for(ignite, load, seconds=15)
         assert ControlUtility(ignite).cluster_state().state == "ACTIVE"
@@ -86,6 +90,8 @@ class DiskFullTest(IgniteTest):
             check_write_failed(ignite, log)
 
         free_volume(ignite, ignite.log_dir)
+
+        self.pause("volume-freed", LogVolumes(ignite, load))
 
         for log in log_files(ignite):
             check_grows(ignite, log)
@@ -148,10 +154,14 @@ class DiskFullTest(IgniteTest):
 
         load = self.__start_load_client(ignite)
 
+        self.pause("cluster-up", LogVolumes(ignite, load))
+
         flood = self.__start_flood_service(ignite)
 
         wait_until(lambda: free_space(ignite, ignite.log_dir) == 0, timeout_sec=60,
                    err_msg="System.out did not fill the log volume")
+
+        self.pause("volume-full", LogVolumes(ignite, load))
 
         lines = printed_lines(flood)
 
@@ -165,6 +175,8 @@ class DiskFullTest(IgniteTest):
         flood.stop()
 
         enlarge_volume(ignite, ignite.log_dir, 128)
+
+        self.pause("volume-enlarged", LogVolumes(ignite, load))
 
         for log in log_files(ignite):
             check_grows(ignite, log)
@@ -386,6 +398,126 @@ def free_space(ignite, path):
     :return: Bytes free on the volume of the path.
     """
     return int(ignite.exec_command(ignite.nodes[0], f"df --output=avail -B1 {path} | tail -1"))
+
+
+class LogVolumes:
+    """
+    Describes, for a demo breakpoint banner (see :meth:`ignitetest.utils.ignite_test.IgniteTest.pause`), the volumes
+    the test mounted over the node's directories, the node's logs on them, and the load the client drives.
+    """
+
+    # The flood service's console lines are 1 KB of 'x', and ignite.log's metrics lines are long too: the banner
+    # shows the head of every tail line, which is enough to tell one from the other.
+    LINE_WIDTH = 100
+
+    # How long the two log snapshots are apart, so the audience can see whether the logs moved.
+    SNAPSHOT_GAP_SEC = 5
+
+    def __init__(self, ignite, load):
+        self.ignite = ignite
+        self.load = load
+
+    def describe(self):
+        """
+        :return: Section lines, the first one being the section title.
+        """
+        ignite = self.ignite
+        node = ignite.nodes[0]
+        console_log = os.path.join(ignite.log_dir, "console.log")
+
+        logs = [node.log_file, console_log]
+
+        # Two snapshots a few seconds apart, so the audience sees whether the logs moved between them.
+        first = {log: self.__tail(node, log) for log in logs}
+        first_size = {log: file_size(ignite, log) for log in logs}
+
+        time.sleep(self.SNAPSHOT_GAP_SEC)
+
+        second = {log: self.__tail(node, log) for log in logs}
+        second_size = {log: file_size(ignite, log) for log in logs}
+
+        lines = ["VOLUMES"]
+        lines.extend(self.__volumes(node))
+
+        lines.append("LOGS")
+
+        for log in logs:
+            lines.append(f"  {log} ({first_size[log]} -> {second_size[log]} bytes over {self.SNAPSHOT_GAP_SEC} s)")
+            lines.append("    now:")
+            lines.extend(f"      {entry}" for entry in first[log])
+            lines.append(f"    +{self.SNAPSHOT_GAP_SEC}s:")
+            lines.extend(f"      {entry}" for entry in second[log])
+
+        lines.append("SHOW")
+        lines.extend(self.__show(node, console_log))
+
+        return lines
+
+    def __tail(self, node, path):
+        """
+        :return: The last few lines of the file, cut to the banner width.
+        """
+        return self.ignite.exec_command(node, f"tail -n 3 {path} | cut -c -{self.LINE_WIDTH}").splitlines()
+
+    def __volumes(self, node):
+        """
+        :return: The mounted volumes, columns aligned, with an annotation naming what each one is.
+        """
+        rows = []
+
+        for mount in self.ignite.exec_command(
+                node, f"findmnt -rn -S {self.ignite.TMPFS_SOURCE} -o TARGET,SIZE,USED,AVAIL,USE%").splitlines():
+            target, size, used, avail, use = mount.split()
+            rows.append(([target, size, used, avail, use], "tmpfs over the log directory (mounted by the test)"))
+
+        fs, size, used, avail, use, target = self.ignite.exec_command(
+            node, f"df -h {self.ignite.persistent_root} | tail -1").split()
+
+        rows.append(([target, size, used, avail, use],
+                     f"the container's root fs ({fs}); the node's data (partitions, wal, wal_archive) lives here"))
+
+        return self.__table(["MOUNTPOINT", "SIZE", "USED", "AVAIL", "USE%"], rows)
+
+    @staticmethod
+    def __table(header, rows):
+        """
+        :param header: The column titles.
+        :param rows: (fields, annotation) pairs, the fields in the order of the header.
+        :return: One line per row, every field padded to its column's width, so the tab after it lands on the same
+                 stop on every line and the columns line up.
+        """
+        widths = [max(len(title), *(len(row[0][i]) for row in rows)) for i, title in enumerate(header)]
+
+        lines = ["  " + "\t".join(title.ljust(width) for title, width in zip(header, widths))]
+
+        for fields, note in rows:
+            lines.append("  " + "\t".join(field.ljust(width) for field, width in zip(fields, widths)) + "\t" + note)
+
+        return lines
+
+    def __show(self, node, console_log):
+        """
+        :return: Ready-to-paste commands for the audience, each with a one-line label of what it shows.
+        """
+        host = node.account.hostname
+        load_node = self.load.nodes[0]
+        control_cmd = f"{self.ignite.script('control.sh')} --host {node.account.externally_routable_ip} --baseline"
+
+        return [
+            "  # cluster state (ACTIVE/INACTIVE, topology, baseline):",
+            f"  docker exec {host} bash -c \"{control_cmd}\"",
+            "  # both log file sizes, every 2 s (watch: Ctrl-C stops it):",
+            f"  watch -n 2 \"docker exec {host} stat -c '%s %n' {node.log_file} {console_log}\"",
+            "  # ignite.log size only:",
+            f"  watch -n 2 \"docker exec {host} stat -c '%s' {node.log_file}\"",
+            "  # console.log size only:",
+            f"  watch -n 2 \"docker exec {host} stat -c '%s' {console_log}\"",
+            "  # last lines of each log:",
+            f"  docker exec {host} tail -n 5 {node.log_file}",
+            f"  docker exec {host} tail -n 5 {console_log} | cut -c -{self.LINE_WIDTH}",
+            "  # the client's puts and errors (the load app reports once a second):",
+            f"  docker exec {load_node.account.hostname} grep 'progress->' {load_node.log_file} | tail -n 5",
+        ]
 
 
 def printed_lines(flood):
