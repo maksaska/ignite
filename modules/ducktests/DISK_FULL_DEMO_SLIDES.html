@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Полный том с логами</title>
+<style>
+:root {
+  --bg: #e9e7e1;
+  --surface: #fbfaf7;
+  --ink: #1d2025;
+  --muted: #5d636d;
+  --line: #d3cfc6;
+  --accent: #2456c0;
+  --accent-soft: #e3eafa;
+  --bad: #b8382c;
+  --bad-soft: #f8e4e1;
+  --good: #1c7c46;
+  --good-soft: #def2e6;
+  --term-bg: #16181c;
+  --term-ink: #dfe3e8;
+  --term-dim: #8a929c;
+  --term-hi: #f2c75c;
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1013;
+    --surface: #181b20;
+    --ink: #e7e5e0;
+    --muted: #a1a7b1;
+    --line: #353a42;
+    --accent: #7ea2ff;
+    --accent-soft: #1d2740;
+    --bad: #ff7a6b;
+    --bad-soft: #3a1f1c;
+    --good: #5cc98a;
+    --good-soft: #17301f;
+    --term-bg: #0b0c0e;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1013;
+  --surface: #181b20;
+  --ink: #e7e5e0;
+  --muted: #a1a7b1;
+  --line: #353a42;
+  --accent: #7ea2ff;
+  --accent-soft: #1d2740;
+  --bad: #ff7a6b;
+  --bad-soft: #3a1f1c;
+  --good: #5cc98a;
+  --good-soft: #17301f;
+  --term-bg: #0b0c0e;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  overflow: hidden;
+}
+.stage { position: fixed; inset: 0; display: grid; place-items: center; }
+.deck { width: 1280px; height: 720px; position: relative; transform-origin: center center; flex: none; }
+.slide {
+  position: absolute; inset: 0;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .12);
+  padding: 52px 64px 48px;
+  display: none;
+  flex-direction: column;
+}
+.slide.active { display: flex; }
+.slide h2 { font-size: 38px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -.01em; }
+.slide .sub { font-size: 21px; color: var(--muted); margin: 0 0 24px; line-height: 1.35; }
+.footer {
+  position: absolute; left: 64px; right: 64px; bottom: 18px;
+  display: flex; justify-content: space-between;
+  font-size: 13px; color: var(--muted);
+}
+code, .mono { font-family: var(--mono); }
+code { font-size: .92em; background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; }
+
+figure { margin: 0; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { font-size: 17px; color: var(--muted); margin-top: 10px; line-height: 1.4; }
+
+/* title */
+.title { justify-content: center; }
+.kicker { font-size: 18px; color: var(--accent); font-weight: 600; letter-spacing: .02em; margin-bottom: 18px; }
+.title h1 { font-size: 64px; line-height: 1.05; margin: 0 0 18px; letter-spacing: -.02em; }
+.title .lead { font-size: 26px; color: var(--muted); margin: 0 0 40px; max-width: 900px; line-height: 1.35; }
+.expect { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.expect div { border-radius: 12px; padding: 18px 20px; font-size: 21px; line-height: 1.35; background: var(--good-soft); }
+.expect b { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--good); margin-bottom: 6px; }
+.expect div.loss { background: var(--bad-soft); }
+.expect div.loss b { color: var(--bad); }
+
+/* log path effects */
+.effects { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+.effects div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 17px; line-height: 1.35; }
+.effects b { display: block; margin-bottom: 4px; font-size: 17px; }
+.verdict { margin-top: 14px; font-size: 20px; }
+.verdict strong { color: var(--good); }
+.note { margin-top: 10px; font-size: 16px; color: var(--muted); line-height: 1.4; }
+
+/* scenarios grid */
+.scen { display: grid; grid-template-columns: 118px 1fr 1.2fr 1.3fr 1.15fr 1fr; gap: 10px; font-size: 18.5px; line-height: 1.34; }
+.scen .h { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 0 4px 2px; align-self: end; }
+.scen .row { font-weight: 600; font-size: 18px; align-self: center; }
+.scen .row small { display: block; font-weight: 400; color: var(--muted); font-size: 14px; }
+.scen .c { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; min-height: 150px; display: flex; flex-direction: column; gap: 8px; }
+.scen .c.full { background: var(--bad-soft); }
+.scen .c.ok { background: var(--good-soft); }
+.scen .span { grid-row: span 2; justify-content: center; }
+.pause {
+  align-self: flex-start; margin-top: auto;
+  font-family: var(--mono); font-size: 14px; font-weight: 600;
+  background: var(--ink); color: var(--surface);
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+}
+.scen .c ul { margin: 0; padding-left: 18px; }
+.scen .c li { margin: 2px 0; }
+.legend { margin-top: 16px; font-size: 16px; color: var(--muted); }
+
+/* terminals */
+.terms { display: grid; grid-template-columns: 1fr 1.25fr 1.1fr; gap: 18px; align-items: start; }
+.term { border-radius: 10px; overflow: hidden; background: var(--term-bg); color: var(--term-ink); box-shadow: 0 4px 16px rgba(0, 0, 0, .18); }
+.term .bar { font-family: var(--sans); font-size: 15px; font-weight: 600; padding: 8px 12px; background: rgba(255, 255, 255, .07); display: flex; gap: 8px; align-items: center; }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #5b6068; display: inline-block; }
+.term pre { margin: 0; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.45; white-space: pre; overflow: hidden; }
+.term.dim { opacity: .45; }
+.term.hi { outline: 3px solid var(--accent); }
+.term .y { color: var(--term-hi); }
+.term .d { color: var(--term-dim); }
+.term .g { color: #6fd39b; }
+.term .r { color: #ff8b7e; }
+.tcap { font-size: 17px; line-height: 1.35; margin-top: 10px; }
+.tcap b { display: block; }
+.howto { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; font-size: 18px; line-height: 1.4; }
+.howto div { border-left: 4px solid var(--accent); padding: 4px 0 4px 14px; }
+
+/* banner anatomy */
+.anat { display: grid; grid-template-columns: 742px 1fr; gap: 24px; flex: 1; min-height: 0; align-items: start; }
+.anat .term pre { font-size: 11.2px; line-height: 1.32; padding: 10px 12px; }
+.calls { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; font-size: 15.5px; line-height: 1.33; }
+.calls li { display: grid; grid-template-columns: 30px 1fr; gap: 8px; }
+.calls .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface); font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+.calls b { font-family: var(--mono); font-size: 15px; }
+.calls li.key .n { background: var(--good); }
+.badge { background: var(--accent); color: #fff; border-radius: 50%; padding: 0 5px; font-family: var(--sans); font-weight: 700; font-size: 10px; }
+
+/* commands table */
+table.cmds { border-collapse: collapse; width: 100%; font-size: 17px; line-height: 1.35; }
+table.cmds th { text-align: left; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 0 10px 8px; border-bottom: 2px solid var(--line); }
+table.cmds td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.cmds td:first-child { font-family: var(--mono); font-size: 14.5px; width: 430px; }
+table.cmds .full { color: var(--bad); }
+table.cmds .ok { color: var(--good); }
+
+.nav {
+  position: fixed; right: 16px; top: 12px; display: flex; gap: 6px; z-index: 5;
+  opacity: .25; transition: opacity .2s;
+}
+.nav:hover { opacity: 1; }
+.nav button {
+  font: 600 14px var(--sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div class="stage">
+<div class="deck" id="deck">
+
+<!-- 1 -->
+<section class="slide title">
+  <div class="kicker">Apache Ignite · ducktests · IGNITE-29165</div>
+  <h1>Узел Ignite<br>и полный том с логами</h1>
+  <p class="lead">Логи узла лежат на отдельном томе, и он заполнился. Проверяем на живом кластере, что делает узел.</p>
+  <div class="expect">
+    <div><b>Узел</b>работает и держит нагрузку: put идут без ошибок, кластер ACTIVE</div>
+    <div class="loss"><b>Логи</b>пока места нет, строки теряются</div>
+    <div><b>Место вернулось</b>логи снова пишутся, без рестарта узла</div>
+  </div>
+  <div class="footer"><span>Демо: два репродьюсера из disk_full_test.py</span><span class="num"></span></div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <h2>Стенд: Ignite в Docker-контейнерах на ноутбуке</h2>
+  <p class="sub">Каждый контейнер — отдельная машина кластера. Тест управляет ими по ssh.</p>
+  <figure>
+    <svg viewBox="0 0 1160 420" role="img" aria-label="Ноутбук с Docker: run_tests.sh запускает тест в ducker01, тест по ssh стартует сервер Ignite в ducker02, клиент нагрузки в ducker03 и флудер в ducker04. На ducker02 каталог логов — tmpfs на 32 МБ, данные лежат на диске контейнера.">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif" fill="currentColor">
+        <rect x="2" y="2" width="1156" height="416" rx="16" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="6 6"/>
+        <text x="24" y="32" font-size="16" font-weight="600" opacity=".7">Ноутбук · Docker · репозиторий Ignite смонтирован во все контейнеры</text>
+
+        <!-- run_tests -->
+        <rect x="30" y="60" width="230" height="56" rx="10" fill="none" stroke="currentColor"/>
+        <text x="145" y="94" font-size="18" text-anchor="middle" font-family="ui-monospace, Consolas, monospace">run_tests.sh</text>
+        <line x1="145" y1="116" x2="145" y2="166" stroke="currentColor" stroke-width="1.6" marker-end="url(#a2)"/>
+        <text x="157" y="146" font-size="14" opacity=".8">запускает тест</text>
+
+        <!-- ducker01 -->
+        <rect x="30" y="170" width="230" height="140" rx="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="48" y="200" font-size="15" opacity=".65" font-family="ui-monospace, Consolas, monospace">ducker01</text>
+        <text x="48" y="228" font-size="20" font-weight="700">ducktape</text>
+        <text x="48" y="254" font-size="15">сам тест: стартует узлы,</text>
+        <text x="48" y="274" font-size="15">ставит паузы, проверяет</text>
+
+        <!-- ducker02 -->
+        <rect x="330" y="50" width="390" height="300" rx="12" fill="none" stroke="currentColor" stroke-width="2.2"/>
+        <text x="350" y="80" font-size="15" opacity=".65" font-family="ui-monospace, Consolas, monospace">ducker02</text>
+        <text x="350" y="106" font-size="20" font-weight="700">сервер Ignite (persistence)</text>
+        <rect x="350" y="122" width="350" height="108" rx="10" fill="var(--bad-soft)" stroke="var(--bad)" stroke-width="2"/>
+        <text x="368" y="150" font-size="17" font-weight="700" font-family="ui-monospace, Consolas, monospace">/mnt/service/logs</text>
+        <text x="368" y="175" font-size="15" fill="var(--bad)" font-weight="600">tmpfs 32 МБ — монтирует тест</text>
+        <text x="368" y="203" font-size="15" font-family="ui-monospace, Consolas, monospace">ignite.log · console.log · gc.log</text>
+        <rect x="350" y="242" width="350" height="92" rx="10" fill="none" stroke="currentColor" stroke-opacity=".6"/>
+        <text x="368" y="270" font-size="17" font-weight="700" font-family="ui-monospace, Consolas, monospace">/mnt/service</text>
+        <text x="368" y="294" font-size="15">диск контейнера, места много</text>
+        <text x="368" y="318" font-size="15" font-family="ui-monospace, Consolas, monospace">partitions · wal · wal_archive</text>
+
+        <!-- ducker03 -->
+        <rect x="800" y="50" width="340" height="124" rx="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="818" y="80" font-size="15" opacity=".65" font-family="ui-monospace, Consolas, monospace">ducker03</text>
+        <text x="818" y="106" font-size="20" font-weight="700">нагрузка</text>
+        <text x="818" y="132" font-size="15">thin client кладёт данные в кэш,</text>
+        <text x="818" y="152" font-size="15">раз в секунду пишет «put / ошибки»</text>
+        <line x1="800" y1="112" x2="724" y2="112" stroke="currentColor" stroke-width="1.6" marker-end="url(#a2)"/>
+        <text x="762" y="102" font-size="14" text-anchor="middle">put</text>
+
+        <!-- ducker04 -->
+        <rect x="800" y="210" width="340" height="124" rx="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="818" y="240" font-size="15" opacity=".65" font-family="ui-monospace, Consolas, monospace">ducker04 · только во флуд-тесте</text>
+        <text x="818" y="266" font-size="20" font-weight="700">флудер</text>
+        <text x="818" y="292" font-size="15">thick client ставит на сервер сервис,</text>
+        <text x="818" y="312" font-size="15">который пишет в System.out</text>
+        <line x1="800" y1="272" x2="724" y2="272" stroke="currentColor" stroke-width="1.6" marker-end="url(#a2)"/>
+        <text x="762" y="262" font-size="14" text-anchor="middle">deploy</text>
+
+        <!-- ssh bus -->
+        <polyline points="145,310 145,388 970,388" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <line x1="525" y1="388" x2="525" y2="354" stroke="currentColor" stroke-opacity=".55" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a2)"/>
+        <line x1="970" y1="388" x2="970" y2="338" stroke="currentColor" stroke-opacity=".55" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a2)"/>
+        <text x="560" y="408" font-size="14" opacity=".8">ssh из теста: старт процессов, команды, чтение логов</text>
+      </g>
+    </svg>
+    <figcaption>tmpfs — том в памяти фиксированного размера. Тест монтирует его поверх каталога логов до старта узла. Когда том полон, любая запись в него получает ошибку «No space left on device».</figcaption>
+  </figure>
+  <div class="footer"><span>Стенд</span><span class="num"></span></div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <h2>Как строка лога попадает на диск</h2>
+  <p class="sub">Три пути, и все три файла лежат на одном томе в 32 МБ.</p>
+  <figure>
+    <svg viewBox="0 0 1160 236" role="img" aria-label="Код Ignite пишет через log4j2 в ignite.log и короткий тихий вывод в System.out, ошибки уровня ERROR log4j2 дублирует в System.err. System.out и System.err JVM перенаправлены оболочкой в console.log. Сборщик мусора пишет gc.log. Все три файла лежат на tmpfs 32 МБ.">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif" fill="currentColor">
+        <rect x="2" y="2" width="660" height="232" rx="14" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-dasharray="6 6"/>
+        <text x="20" y="26" font-size="15" font-weight="600" opacity=".7">JVM узла</text>
+
+        <rect x="770" y="2" width="386" height="232" rx="14" fill="var(--bad-soft)" stroke="var(--bad)" stroke-width="2"/>
+        <text x="790" y="26" font-size="15" font-weight="700" fill="var(--bad)">tmpfs 32 МБ · /mnt/service/logs</text>
+
+        <rect x="20" y="38" width="180" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="110" y="61" font-size="17" font-weight="600" text-anchor="middle">Код Ignite</text>
+        <text x="110" y="80" font-size="13" text-anchor="middle" opacity=".75">log.info(…)</text>
+
+        <rect x="20" y="108" width="180" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="110" y="131" font-size="17" font-weight="600" text-anchor="middle">Код сервиса</text>
+        <text x="110" y="150" font-size="13" text-anchor="middle" opacity=".75">System.out.println(…)</text>
+
+        <rect x="20" y="176" width="180" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="110" y="199" font-size="17" font-weight="600" text-anchor="middle">Сборщик мусора</text>
+        <text x="110" y="218" font-size="13" text-anchor="middle" opacity=".75">-Xlog:gc</text>
+
+        <rect x="280" y="38" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="380" y="70" font-size="18" font-weight="700" text-anchor="middle">log4j2</text>
+
+        <rect x="280" y="108" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="380" y="131" font-size="16" font-weight="700" text-anchor="middle">System.out / err</text>
+        <text x="380" y="150" font-size="13" text-anchor="middle" opacity=".75">дескрипторы 1 и 2</text>
+
+        <line x1="200" y1="64" x2="276" y2="64" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <line x1="200" y1="134" x2="276" y2="134" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <line x1="200" y1="82" x2="276" y2="116" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="290" y="103" font-size="12" opacity=".85">тихий вывод</text>
+        <line x1="380" y1="90" x2="380" y2="104" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="390" y="103" font-size="12" opacity=".85" dx="8">только ERROR</text>
+
+        <line x1="480" y1="64" x2="866" y2="64" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="506" y="55" font-size="13" opacity=".85">appender FILE, файл до 10 МБ</text>
+        <line x1="480" y1="134" x2="866" y2="134" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="506" y="125" font-size="13" opacity=".85" font-family="ui-monospace, Consolas, monospace">ignite.sh … &gt;&gt; console.log 2&gt;&amp;1</text>
+        <line x1="200" y1="202" x2="866" y2="202" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
+        <text x="506" y="193" font-size="13" opacity=".85">unified logging JVM</text>
+
+        <rect x="870" y="38" width="200" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="970" y="70" font-size="17" font-weight="600" text-anchor="middle" font-family="ui-monospace, Consolas, monospace">ignite.log</text>
+        <rect x="870" y="108" width="200" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="970" y="140" font-size="17" font-weight="600" text-anchor="middle" font-family="ui-monospace, Consolas, monospace">console.log</text>
+        <rect x="870" y="176" width="200" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
+        <text x="970" y="208" font-size="17" font-weight="600" text-anchor="middle" font-family="ui-monospace, Consolas, monospace">gc.log</text>
+      </g>
+    </svg>
+  </figure>
+  <div class="effects">
+    <div><b>log4j2 → ignite.log</b>ловит ошибку записи, сообщает о ней в stderr не чаще раза в 5 минут. <code>log.info()</code> возвращается как обычно.</div>
+    <div><b>System.out → console.log</b>PrintStream глотает ошибку записи: <code>println()</code> не падает и не блокируется.</div>
+    <div><b>GC → gc.log</b>JVM пишет «Could not write log» в stderr и работает дальше.</div>
+  </div>
+  <p class="verdict">Ошибка записи не доходит до кода узла — <strong>узел работает дальше</strong>.</p>
+  <p class="note">Обычно ducktests пропускает вывод узла через <code>tee</code>: тогда ошибку получает tee, а не JVM, и tee больше не пишет в файл. Тест запускает узел как <code>nohup</code>: JVM сама пишет в <code>console.log</code>.</p>
+  <div class="footer"><span>Путь логов</span><span class="num"></span></div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <h2>Сценарий: два способа заполнить том</h2>
+  <p class="sub">Шаги одинаковые, отличаются только заполнение и возврат места. На паузах тест стоит, кластер работает.</p>
+  <div class="scen">
+    <div></div>
+    <div class="h">1 · Старт</div>
+    <div class="h">2 · Заполнение</div>
+    <div class="h">3 · 15 с на полном томе</div>
+    <div class="h">4 · Место вернулось</div>
+    <div class="h">5 · Проверка</div>
+
+    <div class="row">Флудер<small>основной</small></div>
+    <div class="c span">
+      <span>Узел стартует, кластер активируется, клиент начинает put</span>
+      <span class="pause">⏸ cluster-up</span>
+    </div>
+    <div class="c full">
+      <span>Сервис внутри узла пишет в System.out строки по 1 КБ, ~10 МБ/с. Том полон за секунды</span>
+      <span class="pause">⏸ volume-full</span>
+    </div>
+    <div class="c ok span">
+      <ul>
+        <li>put идут без ошибок</li>
+        <li>кластер ACTIVE</li>
+        <li>последняя запись в лог отклонена — том правда полон</li>
+        <li>флудер: сервис продолжает писать</li>
+      </ul>
+    </div>
+    <div class="c">
+      <span>Сервис отменён, том увеличен до 128 МБ, файлы на месте</span>
+      <span class="pause">⏸ volume-enlarged</span>
+    </div>
+    <div class="c ok span">
+      <span>Логи снова растут. В <span class="mono">ignite.log</span> дыра на время, пока том был полон</span>
+    </div>
+
+    <div class="row">Файл-заполнитель</div>
+    <div class="c full">
+      <span><span class="mono">dd</span> пишет файл, пока не получит «No space left on device»</span>
+      <span class="pause">⏸ volume-full</span>
+    </div>
+    <div class="c">
+      <span>Файл-заполнитель удалён</span>
+      <span class="pause">⏸ volume-freed</span>
+    </div>
+  </div>
+  <p class="legend">⏸ — пауза: тест ждёт Enter в демо-консоли. Нагрузка, флудер и узел в это время работают.</p>
+  <div class="footer"><span>Сценарий</span><span class="num"></span></div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <h2>Что будет на экране: три терминала</h2>
+  <p class="sub">Смотрим на второй и третий. Первый только запускает тест.</p>
+  <div class="terms">
+    <div>
+      <div class="term dim">
+        <div class="bar"><i></i>1 · запуск</div>
+<pre>$ ./docker/run_tests.sh -n 4 \
+    -gj '{"disk_full_tests": true,
+          "demo_pause": "*"}' \
+    -t …/disk_full_test.py::…
+<span class="d">…лог ducktape…</span></pre>
+      </div>
+      <p class="tcap"><b>Запуск теста</b>Сюда не смотрим.</p>
+    </div>
+    <div>
+      <div class="term hi">
+        <div class="bar"><i></i>2 · демо-консоль</div>
+<pre><span class="y"> PAUSED 2   volume-full</span>
+<span class="d"> …</span>
+LAST 5 S
+  ignite.log   …  +0 B     <span class="r">no space</span>
+  console.log  …  +0 B     <span class="r">no space</span>
+  load puts    …  <span class="g">+18,029</span>  errors 0
+  flood lines  …  <span class="g">+43,430</span>
+<span class="d"> …</span>
+ [Enter] continue  [c] skip the rest  [a] abort</pre>
+      </div>
+      <p class="tcap"><b>Баннер паузы</b>Тест встал на паузу — консоль показывает, что с томами, логами и нагрузкой. Enter — следующий шаг.</p>
+    </div>
+    <div>
+      <div class="term">
+        <div class="bar"><i></i>3 · живые команды</div>
+<pre>$ control.sh --baseline
+<span class="g">Cluster state: ACTIVE</span>
+$ watch stat … ignite.log
+<span class="d">1458311 /mnt/service/logs/ignite.log</span>
+$ grep progress-> …
+<span class="g">progress->72100 0&lt;-</span></pre>
+      </div>
+      <p class="tcap"><b>Проверка руками</b>Кластер жив, put идут, логи стоят — видно без баннера.</p>
+    </div>
+  </div>
+  <div class="howto">
+    <div>Как работает пауза: тест пишет баннер в файл в репозитории, он виден и в контейнере, и на ноутбуке. Консоль его показывает, Enter создаёт файл-сигнал, и тест идёт дальше.</div>
+    <div>Пауза держится до Enter или до таймаута — в демо 15 минут. Останавливается только сценарий теста: узел, нагрузка и флудер продолжают работать.</div>
+  </div>
+  <div class="footer"><span>Экран</span><span class="num"></span></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <h2>Баннер паузы: как читать</h2>
+  <p class="sub">Реальный баннер флуд-теста на паузе volume-full, команды в конце свёрнуты.</p>
+  <div class="anat">
+    <div class="term">
+<pre id="banner">====================================================================================================
+<span class="y"> PAUSED 2   volume-full</span>                                                           <span class="badge">1</span>
+ test  …DiskFullTest.test_node_survives_log_volume_filled_by_stdout.ignite_version=ignite-dev
+ t+00:25 since test start                                                    auto-continue in 02:00
+----------------------------------------------------------------------------------------------------
+SERVICES <span class="badge">2</span>
+  IgniteService-0-138867291044688 node 1 on ducker02                           <span class="g">UP</span>
+  IgniteApplicationService-0-138867291037328 node 1 on ducker03                   <span class="g">UP</span>
+  IgniteApplicationService-1-138867291475088 node 1 on ducker04                   <span class="g">UP</span>
+----------------------------------------------------------------------------------------------------
+VOLUMES <span class="badge">3</span>
+                            fs                   size   used  avail   use%
+  logs  /mnt/service/logs   ignitetest-tmpfs      32M    32M      <span class="r">0   100%</span>
+  data  /mnt/service        overlay             1007G    22G   935G     3%
+LAST 5 S <span class="badge">4</span>
+  ignite.log     96.0 KB  +2.7 KB   <span class="r">no space</span>  last line 12:42:23, 5 s ago
+  console.log    31.6 MB  +0 B      <span class="r">no space</span>
+  load puts       66,682  <span class="g">+17,843</span>   errors 0
+  flood lines     79,130  <span class="g">+51,780</span>
+LAST LINES ignite.log <span class="badge">5</span>
+  [2026-10-21T12:42:23,400][INFO ][wal-file-cleaner%None-#82%None%][FileWriteAheadLogManager] Starting
+  [2026-10-21T12:42:23,40
+LAST LINES console.log
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SHOW <span class="badge">6</span>
+  # cluster state and baseline:
+  docker exec ducker02 bash -c "/opt/ignite-dev/bin/control.sh --host ducker02 --baseline"
+<span class="d">  … ещё 8 команд, подсказки по узлам, как продолжить</span>
+====================================================================================================</pre>
+    </div>
+    <ol class="calls">
+      <li><span class="n">1</span><span><b>PAUSED</b> — номер и имя паузы, сколько идёт тест, через сколько продолжит сам</span></li>
+      <li><span class="n">2</span><span><b>SERVICES</b> — все процессы теста и живы ли они</span></li>
+      <li><span class="n">3</span><span><b>VOLUMES</b> — том логов (tmpfs) и том данных: размер, занято, свободно</span></li>
+      <li class="key"><span class="n">4</span><span><b>LAST 5 S</b> — главное: два замера через 5 секунд. Логи стоят (<b>no space</b>), put идут без ошибок, флудер пишет. Когда место вернётся: <b>growing</b> и строка <b>gap</b> — сколько узел не писал</span></li>
+      <li><span class="n">5</span><span><b>LAST LINES</b> — последние строки обоих логов. Строка обрезана: полный tmpfs дописал только хвост страницы файла, отсюда и +2.7 KB</span></li>
+      <li><span class="n">6</span><span><b>SHOW</b> — готовые команды для третьего терминала с именами контейнеров этого прогона</span></li>
+    </ol>
+  </div>
+  <div class="footer"><span>Баннер</span><span class="num"></span></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <h2>Третий терминал: что проверяем руками</h2>
+  <p class="sub">Команды берём из секции SHOW баннера: имена контейнеров меняются от прогона к прогону.</p>
+  <table class="cmds">
+    <thead><tr><th>Команда</th><th>Что показывает</th><th>Том полон</th><th>Место вернулось</th></tr></thead>
+    <tbody>
+      <tr><td>control.sh --baseline</td><td>состояние кластера и baseline</td><td class="ok">ACTIVE, узел в baseline</td><td class="ok">ACTIVE</td></tr>
+      <tr><td>watch -n 2 "… stat -c '%s %n' ignite.log console.log"</td><td>размеры логов каждые 2 секунды</td><td class="full">числа стоят</td><td class="ok">ignite.log растёт</td></tr>
+      <tr><td>tail -n 5 ignite.log</td><td>последние строки лога</td><td class="full">последняя строка старая</td><td class="ok">свежие строки</td></tr>
+      <tr><td>grep 'progress-&gt;' (клиент)</td><td>put и ошибки клиента раз в секунду</td><td class="ok">put растут, ошибок 0</td><td class="ok">так же</td></tr>
+      <tr><td>grep 'lines-&gt;' (флудер)</td><td>сколько строк написал сервис</td><td class="ok">растёт: сервис пишет в никуда</td><td>сервис отменён</td></tr>
+    </tbody>
+  </table>
+  <div class="footer"><span>Команды</span><span class="num"></span></div>
+</section>
+
+</div>
+</div>
+<div class="nav"><button id="prev" aria-label="Назад">←</button><button id="next" aria-label="Вперёд">→</button><button id="fs" aria-label="Во весь экран">⛶</button></div>
+<script>
+(function () {
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
+  var cur = 0;
+
+  slides.forEach(function (s, i) {
+    var n = s.querySelector(".num");
+    if (n) n.textContent = (i + 1) + " / " + slides.length;
+  });
+
+  function fit() {
+    var k = Math.min(window.innerWidth / 1280, window.innerHeight / 720) * 0.96;
+    deck.style.transform = "scale(" + k + ")";
+  }
+
+  function show(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, j) { s.classList.toggle("active", j === cur); });
+    if (location.hash !== "#" + (cur + 1)) history.replaceState(null, "", "#" + (cur + 1));
+  }
+
+  function fullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (["ArrowRight", "PageDown", " ", "Enter"].indexOf(e.key) >= 0) { show(cur + 1); e.preventDefault(); }
+    else if (["ArrowLeft", "PageUp", "Backspace"].indexOf(e.key) >= 0) { show(cur - 1); e.preventDefault(); }
+    else if (e.key === "Home") show(0);
+    else if (e.key === "End") show(slides.length - 1);
+    else if (e.key === "f" || e.key === "F") fullscreen();
+  });
+  document.getElementById("prev").onclick = function () { show(cur - 1); };
+  document.getElementById("next").onclick = function () { show(cur + 1); };
+  document.getElementById("fs").onclick = fullscreen;
+  window.addEventListener("resize", fit);
+
+  fit();
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>
