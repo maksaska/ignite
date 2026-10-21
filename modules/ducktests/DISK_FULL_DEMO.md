@@ -1,6 +1,6 @@
 # Демо: переполнение тома с логами (disk_full_test)
 
-Шпаргалка для показа коллегам двух тестов из `tests/ignitetest/tests/disk_full_test.py`.
+Шпаргалка для показа коллегам трёх тестов из `tests/ignitetest/tests/disk_full_test.py`.
 Общее про демо-режим и `demo_pause` — в [README.md](README.md), раздел *Demo Mode (Breakpoints)*.
 
 ## Что показываем
@@ -9,6 +9,7 @@
 |---|---|
 | `test_node_survives_full_log_volume` | Том с логами забит внешней записью (`dd`-файл). Узел жив, нагрузки идут, логи молчат. Удаляем файл-заполнитель — логи растут снова. |
 | `test_node_survives_log_volume_filled_by_stdout` | Сервис на узле льёт `System.out` (по ~10 МБ/с), сам забивает том с логами. Узел снова жив и держит нагрузку, логи молчат, а сервис продолжает писать (в никуда). После `enlarge_volume` тому добавляют место (remount, файлы сохраняются) — `ignite.log` растёт снова; между старыми и новыми строками виден «разрыв», который оставила полная ёмкость. |
+| `test_node_restarts_on_full_log_volume` | Том забит `dd`-файлом, узел останавливается и стартует снова, пока том полон. Узел поднимается и держит нагрузку, кластер ACTIVE, а новый `ignite.log` пустой: узел работает, не записав ни строки. Удаляем файл — логи растут; дыра в `ignite.log` тянется через рестарт. |
 
 Том — tmpfs 32 МБ, смонтированный тестом поверх `/mnt/service/logs` узла. Data-томов это не касается:
 они лежат на ФС контейнера, узел живой.
@@ -28,6 +29,8 @@
 ./docker/run_tests.sh -n 4 --test-runner-timeout 5400000 \
   -gj '{"disk_full_tests": true, "demo_pause": "*", "demo_pause_timeout_sec": 900}' \
   -t ./ignitetest/tests/disk_full_test.py::DiskFullTest.test_node_survives_log_volume_filled_by_stdout
+
+./docker/run_tests.sh -n 4 --test-runner-timeout 5400000   -gj '{"disk_full_tests": true, "demo_pause": "*", "demo_pause_timeout_sec": 900}'   -t ./ignitetest/tests/disk_full_test.py::DiskFullTest.test_node_restarts_on_full_log_volume
 ```
 
 `--test-runner-timeout` поднят: все паузы теста тратят один бюджет ducktape (по умолчанию 30 мин),
@@ -43,7 +46,8 @@ python docker/demo_console.py     # [Enter] продолжить, [c] продо
 
 ## Паузы
 
-Оба теста: `cluster-up` → `volume-full` → `volume-freed` / `volume-enlarged`.
+Тест с файлом и флуд-тест: `cluster-up` → `volume-full` → `volume-freed` / `volume-enlarged`.
+Тест рестарта: `cluster-up` → `volume-full` → `restarted` → `volume-freed`.
 
 В баннере каждой паузы, кроме списка сервисов, печатается четыре секции — и почти всё, что нужно
 показать, уже на экране:
@@ -132,6 +136,24 @@ docker exec ducker04 grep 'lines->' /mnt/service/logs/ignite.log | tail -n 5    
 В `docker exec` пишите `ignite.log`, а не `ignite*.log`: шаблон раскрывает шелл ноутбука, а не
 контейнера, и команда ищет файл с буквальным именем `ignite*.log`. Шаблон работает только внутри
 `bash -c "..."`.
+
+### `restarted` — узел перезапущен на полном томе (тест рестарта)
+
+После паузы `volume-full` тест останавливает узел (SIGTERM) и запускает его снова, не освобождая том.
+Пауза наступает, когда put снова пошли. В баннере:
+
+- `ignite.log 0 B ... no space`: новый лог пустой, а `last line` — строка ещё до рестарта, `N s ago`;
+- `load puts` растут; `errors` — put, упавшие, пока узла не было, и больше они не растут.
+
+Руками:
+
+```bash
+docker exec ducker02 ls -l /mnt/service/logs       # ignite.log 0 байт рядом с ignite.log.1, gc.log рядом с gc.log.0
+docker exec ducker02 bash -c "/opt/ignite-dev/bin/control.sh --host ducker02 --baseline"   # ACTIVE
+```
+
+На следующей паузе, `volume-freed`, строка `gap` идёт от последней строки до рестарта до первой
+после освобождения места: узел всё это время работал без единой строки в логе.
 
 ### 3. `volume-freed` / `volume-enlarged` — место есть, логи растут
 

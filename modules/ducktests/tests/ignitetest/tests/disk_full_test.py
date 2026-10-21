@@ -113,7 +113,11 @@ class DiskFullTest(IgniteTest):
 
         load = self.__start_load_client(ignite)
 
+        self.pause("cluster-up", LogVolumes(ignite, load))
+
         fill_volume(ignite, ignite.log_dir)
+
+        self.pause("volume-full", LogVolumes(ignite, load))
 
         ignite.stop()
 
@@ -128,11 +132,15 @@ class DiskFullTest(IgniteTest):
 
         wait_until(lambda: progress(load)[0] > puts, timeout_sec=60, err_msg="No puts after the restart")
 
+        self.pause("restarted", LogVolumes(ignite, load))
+
         check_serves_load_for(ignite, load, seconds=15)
         assert ControlUtility(ignite).cluster_state().state == "ACTIVE"
         assert file_size(ignite, ignite.nodes[0].log_file) == 0, "The restarted node wrote its log"
 
         free_volume(ignite, ignite.log_dir)
+
+        self.pause("volume-freed", LogVolumes(ignite, load))
 
         for log in log_files(ignite):
             check_grows(ignite, log)
@@ -415,8 +423,10 @@ class LogVolumes:
     # The flood service's lines are 1 KB of 'x': the banner shows the head of each line.
     LINE_WIDTH = 100
 
-    # Prints the last timestamp of ignite.log, then the longest pause between two lines: seconds, from, to.
-    TIMELINE = ("awk '/^\\[20/ { t = substr($0, 13, 8); split(t, h, \":\"); s = h[1] * 3600 + h[2] * 60 + h[3]; "
+    # Prints the last timestamp of ignite.log and the logs a restart rotated out of it, then the longest pause between
+    # two lines: seconds, from, to. A line the full volume cut inside its timestamp is skipped.
+    TIMELINE = ("awk '/^\\[20/ && substr($0, 21, 1) == \",\" { t = substr($0, 13, 8); split(t, h, \":\"); "
+                "s = h[1] * 3600 + h[2] * 60 + h[3]; "
                 "if (n++ && s - p > gap) { gap = s - p; from = last; to = t } p = s; last = t } "
                 "END { print last, gap + 0, from, to }'")
 
@@ -496,7 +506,7 @@ class LogVolumes:
         """
         :return: When ignite.log got its last line, and the gap a full volume left in it, if any.
         """
-        now, timeline = self.ignite.exec_command(node, f"date +%T; {self.TIMELINE} {log}").splitlines()
+        now, timeline = self.ignite.exec_command(node, f"date +%T; {self.TIMELINE} $(ls -tr {log}*)").splitlines()
         last, silence, start, end = (timeline.split() + [""] * 4)[:4]
 
         if not last:
@@ -540,6 +550,8 @@ class LogVolumes:
             f"  docker exec {host} bash -c \"{control_cmd}\"",
             "  # log sizes every 2 s (Ctrl-C stops it):",
             f"  watch -n 2 \"docker exec {host} stat -c '%s %n' {' '.join(logs)}\"",
+            "  # the log files (a restart starts ignite.log anew, next to ignite.log.1):",
+            f"  docker exec {host} ls -l {self.ignite.log_dir}",
             "  # last lines of each log:",
             f"  docker exec {host} tail -n 5 {logs[0]}",
             f"  docker exec {host} tail -n 5 {logs[1]} | cut -c -{self.LINE_WIDTH}",

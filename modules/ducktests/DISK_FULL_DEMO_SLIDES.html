@@ -109,14 +109,15 @@ figcaption { font-size: 17px; color: var(--muted); margin-top: 10px; line-height
 .note { margin-top: 10px; font-size: 16px; color: var(--muted); line-height: 1.4; }
 
 /* scenarios grid */
-.scen { display: grid; grid-template-columns: 118px 1fr 1.2fr 1.3fr 1.15fr 1fr; gap: 10px; font-size: 18.5px; line-height: 1.34; }
+.scen { display: grid; grid-template-columns: 112px 1fr 1.2fr 1.35fr 1.15fr 1fr; gap: 9px; font-size: 16.5px; line-height: 1.3; }
 .scen .h { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 0 4px 2px; align-self: end; }
 .scen .row { font-weight: 600; font-size: 18px; align-self: center; }
 .scen .row small { display: block; font-weight: 400; color: var(--muted); font-size: 14px; }
-.scen .c { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; min-height: 150px; display: flex; flex-direction: column; gap: 8px; }
+.scen .c { background: var(--accent-soft); border-radius: 10px; padding: 11px 14px; min-height: 104px; display: flex; flex-direction: column; gap: 8px; }
 .scen .c.full { background: var(--bad-soft); }
 .scen .c.ok { background: var(--good-soft); }
 .scen .span { grid-row: span 2; justify-content: center; }
+.scen .span3 { grid-row: span 3; justify-content: center; }
 .pause {
   align-self: flex-start; margin-top: auto;
   font-family: var(--mono); font-size: 14px; font-weight: 600;
@@ -187,7 +188,7 @@ table.cmds .ok { color: var(--good); }
     <div class="loss"><b>Логи</b>пока места нет, строки теряются</div>
     <div><b>Место вернулось</b>логи снова пишутся, без рестарта узла</div>
   </div>
-  <div class="footer"><span>Демо: два репродьюсера из disk_full_test.py</span><span class="num"></span></div>
+  <div class="footer"><span>Демо: три репродьюсера из disk_full_test.py</span><span class="num"></span></div>
 </section>
 
 <!-- 2 -->
@@ -333,18 +334,18 @@ table.cmds .ok { color: var(--good); }
 
 <!-- 4 -->
 <section class="slide">
-  <h2>Сценарий: два способа заполнить том</h2>
-  <p class="sub">Шаги одинаковые, отличаются только заполнение и возврат места. На паузах тест стоит, кластер работает.</p>
+  <h2>Сценарии: два способа заполнить том и рестарт</h2>
+  <p class="sub">Ячейка на несколько строк — общий шаг. На паузах тест стоит, кластер работает.</p>
   <div class="scen">
     <div></div>
     <div class="h">1 · Старт</div>
     <div class="h">2 · Заполнение</div>
-    <div class="h">3 · 15 с на полном томе</div>
+    <div class="h">3 · На полном томе</div>
     <div class="h">4 · Место вернулось</div>
     <div class="h">5 · Проверка</div>
 
     <div class="row">Флудер<small>основной</small></div>
-    <div class="c span">
+    <div class="c span3">
       <span>Узел стартует, кластер активируется, клиент начинает put</span>
       <span class="pause">⏸ cluster-up</span>
     </div>
@@ -353,33 +354,40 @@ table.cmds .ok { color: var(--good); }
       <span class="pause">⏸ volume-full</span>
     </div>
     <div class="c ok span">
+      <span>15 секунд:</span>
       <ul>
         <li>put идут без ошибок</li>
         <li>кластер ACTIVE</li>
         <li>запись в ignite.log, console.log и gc.log отклонена — том правда полон</li>
-        <li>флудер: сервис продолжает писать</li>
+        <li>флудер: сервис пишет дальше</li>
       </ul>
     </div>
     <div class="c">
       <span>Сервис отменён, том увеличен до 128 МБ, файлы на месте</span>
       <span class="pause">⏸ volume-enlarged</span>
     </div>
-    <div class="c ok span">
+    <div class="c ok span3">
       <span>Логи снова растут. В <span class="mono">ignite.log</span> дыра на время, пока том был полон</span>
     </div>
 
-    <div class="row">Файл-заполнитель</div>
-    <div class="c full">
+    <div class="row">Файл</div>
+    <div class="c full span">
       <span><span class="mono">dd</span> пишет файл, пока не получит «No space left on device»</span>
       <span class="pause">⏸ volume-full</span>
     </div>
-    <div class="c">
+    <div class="c span">
       <span>Файл-заполнитель удалён</span>
       <span class="pause">⏸ volume-freed</span>
     </div>
+
+    <div class="row">Рестарт<small>файл + рестарт</small></div>
+    <div class="c ok">
+      <span>Узел остановлен и запущен снова: put без ошибок, ACTIVE, новый <span class="mono">ignite.log</span> — 0 байт</span>
+      <span class="pause">⏸ restarted</span>
+    </div>
   </div>
   <p class="legend">⏸ — пауза: тест ждёт Enter в демо-консоли. Нагрузка, флудер и узел в это время работают.</p>
-  <div class="footer"><span>Сценарий</span><span class="num"></span></div>
+  <div class="footer"><span>Сценарии</span><span class="num"></span></div>
 </section>
 
 <!-- 5 -->
@@ -492,6 +500,7 @@ SHOW <span class="badge">6</span>
       <tr><td>control.sh --baseline</td><td>состояние кластера и baseline</td><td class="ok">ACTIVE, узел в baseline</td><td class="ok">ACTIVE</td></tr>
       <tr><td>watch -n 2 "… stat -c '%s %n' ignite.log console.log"</td><td>размеры логов каждые 2 секунды</td><td class="full">числа стоят</td><td class="ok">растут</td></tr>
       <tr><td>tail -n 5 ignite.log</td><td>последние строки лога</td><td class="full">последняя строка старая</td><td class="ok">свежие строки</td></tr>
+      <tr><td>ls -l /mnt/service/logs</td><td>файлы логов и их размеры</td><td class="full">после рестарта новый ignite.log — 0 байт, рядом ignite.log.1</td><td class="ok">ignite.log растёт</td></tr>
       <tr><td>grep 'progress-&gt;' (клиент)</td><td>put и ошибки клиента раз в секунду</td><td class="ok">put растут, ошибок 0</td><td class="ok">так же</td></tr>
       <tr><td>grep 'lines-&gt;' (флудер)</td><td>сколько строк написал сервис</td><td class="ok">растёт: сервис пишет в никуда</td><td>сервис отменён</td></tr>
     </tbody>
