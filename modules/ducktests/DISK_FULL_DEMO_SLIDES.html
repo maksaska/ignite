@@ -323,7 +323,7 @@ table.cmds .ok { color: var(--good); }
     </svg>
   </figure>
   <div class="effects">
-    <div><b>log4j2 → ignite.log</b>ловит ошибку записи, сообщает о ней в stderr не чаще раза в 5 минут. <code>log.info()</code> возвращается как обычно.</div>
+    <div><b>log4j2 → ignite.log</b>ловит ошибку записи и сообщает о ней в stderr, но не о каждой строке. <code>log.info()</code> возвращается как обычно.</div>
     <div><b>System.out → console.log</b>PrintStream глотает ошибку записи: <code>println()</code> не падает и не блокируется.</div>
     <div><b>GC → gc.log</b>JVM один раз пишет «Could not flush log» в stderr и работает дальше. Место вернулось — пишет снова.</div>
   </div>
