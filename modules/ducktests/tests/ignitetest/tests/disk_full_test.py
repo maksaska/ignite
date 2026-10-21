@@ -161,7 +161,7 @@ class DiskFullTest(IgniteTest):
         wait_until(lambda: free_space(ignite, ignite.log_dir) == 0, timeout_sec=60,
                    err_msg="System.out did not fill the log volume")
 
-        self.pause("volume-full", LogVolumes(ignite, load))
+        self.pause("volume-full", LogVolumes(ignite, load, flood))
 
         lines = printed_lines(flood)
 
@@ -402,100 +402,132 @@ def free_space(ignite, path):
 
 class LogVolumes:
     """
-    Describes, for a demo breakpoint banner (see :meth:`ignitetest.utils.ignite_test.IgniteTest.pause`), the volumes
-    the test mounted over the node's directories, the node's logs on them, and the load the client drives.
+    Describes, for a demo breakpoint banner (see :meth:`ignitetest.utils.ignite_test.IgniteTest.pause`), the node's
+    volumes, whether its logs and its clients moved over a few seconds, and the last lines of the logs.
     """
 
-    # The flood service's console lines are 1 KB of 'x', and ignite.log's metrics lines are long too: the banner
-    # shows the head of every tail line, which is enough to tell one from the other.
+    # How long the two snapshots are apart: the node logs its metrics once a second.
+    GAP_SEC = 5
+
+    # A pause in ignite.log at least this long is a gap the full volume left.
+    SILENCE_SEC = 10
+
+    # The flood service's lines are 1 KB of 'x': the banner shows the head of each line.
     LINE_WIDTH = 100
 
-    # How long the two log snapshots are apart, so the audience can see whether the logs moved.
-    SNAPSHOT_GAP_SEC = 5
+    # Prints the last timestamp of ignite.log, then the longest pause between two lines: seconds, from, to.
+    TIMELINE = ("awk '/^\\[20/ { t = substr($0, 13, 8); split(t, h, \":\"); s = h[1] * 3600 + h[2] * 60 + h[3]; "
+                "if (n++ && s - p > gap) { gap = s - p; from = last; to = t } p = s; last = t } "
+                "END { print last, gap + 0, from, to }'")
 
-    def __init__(self, ignite, load):
+    def __init__(self, ignite, load, flood=None):
         self.ignite = ignite
         self.load = load
+        self.flood = flood
 
     def describe(self):
         """
         :return: Section lines, the first one being the section title.
         """
-        ignite = self.ignite
-        node = ignite.nodes[0]
-        console_log = os.path.join(ignite.log_dir, "console.log")
+        node = self.ignite.nodes[0]
+        logs = [log_file(self.ignite), os.path.join(self.ignite.log_dir, "console.log")]
 
-        logs = [node.log_file, console_log]
+        before = self.__snapshot(node, logs)
 
-        # Two snapshots a few seconds apart, so the audience sees whether the logs moved between them.
-        first = {log: self.__tail(node, log) for log in logs}
-        first_size = {log: file_size(ignite, log) for log in logs}
+        time.sleep(self.GAP_SEC)
 
-        time.sleep(self.SNAPSHOT_GAP_SEC)
+        after = self.__snapshot(node, logs)
 
-        second = {log: self.__tail(node, log) for log in logs}
-        second_size = {log: file_size(ignite, log) for log in logs}
+        last, gap = self.__timeline(node, logs[0])
 
-        lines = ["VOLUMES"]
-        lines.extend(self.__volumes(node))
+        # A full tmpfs still takes the rest of a file's last page, so a log can grow a little on it.
+        full = free_space(self.ignite, self.ignite.log_dir) == 0
 
-        lines.append("LOGS")
+        lines = ["VOLUMES", *self.__volumes(node), f"LAST {self.GAP_SEC} S"]
+
+        for i, log in enumerate(logs):
+            grown = after["sizes"][i] - before["sizes"][i]
+            state = "no space" if full else "growing" if grown else "stopped"
+
+            lines.append(f"  {os.path.basename(log):<12}{size_text(after['sizes'][i]):>10}  "
+                         f"{'+' + size_text(grown):<10}{state:<10}{last if i == 0 else ''}".rstrip())
+
+            if i == 0 and gap:
+                lines.append(f"{'':<46}{gap}")
+
+        lines.extend(self.__clients(before, after))
 
         for log in logs:
-            lines.append(f"  {log} ({first_size[log]} -> {second_size[log]} bytes over {self.SNAPSHOT_GAP_SEC} s)")
-            lines.append("    now:")
-            lines.extend(f"      {entry}" for entry in first[log])
-            lines.append(f"    +{self.SNAPSHOT_GAP_SEC}s:")
-            lines.extend(f"      {entry}" for entry in second[log])
+            lines.append(f"LAST LINES {os.path.basename(log)}")
+            lines.extend(f"  {line}" for line in self.ignite.exec_command(
+                node, f"tail -n 3 {log} | cut -c -{self.LINE_WIDTH}").splitlines())
 
         lines.append("SHOW")
-        lines.extend(self.__show(node, console_log))
+        lines.extend(self.__show(node, logs))
 
         return lines
 
-    def __tail(self, node, path):
+    def __snapshot(self, node, logs):
         """
-        :return: The last few lines of the file, cut to the banner width.
+        :return: The sizes of the logs and what the clients recorded last.
         """
-        return self.ignite.exec_command(node, f"tail -n 3 {path} | cut -c -{self.LINE_WIDTH}").splitlines()
+        return {
+            "sizes": [int(size) for size in self.ignite.exec_command(node, f"stat -c %s {' '.join(logs)}").split()],
+            "progress": last_record(self.load, "progress"),
+            "lines": last_record(self.flood, "lines") if self.flood else None
+        }
 
     def __volumes(self, node):
         """
-        :return: The mounted volumes, columns aligned, with an annotation naming what each one is.
+        :return: A df row for the log volume and one for the volume of the node's data.
         """
-        rows = []
+        paths = [self.ignite.log_dir, self.ignite.persistent_root]
 
-        for mount in self.ignite.exec_command(
-                node, f"findmnt -rn -S {self.ignite.TMPFS_SOURCE} -o TARGET,SIZE,USED,AVAIL,USE%").splitlines():
-            target, size, used, avail, use = mount.split()
-            rows.append(([target, size, used, avail, use], "tmpfs over the log directory (mounted by the test)"))
+        rows = self.ignite.exec_command(
+            node, f"df -h --output=source,size,used,avail,pcent {' '.join(paths)} | tail -2").splitlines()
 
-        fs, size, used, avail, use, target = self.ignite.exec_command(
-            node, f"df -h {self.ignite.persistent_root} | tail -1").split()
+        lines = [volume_row("", "", ["fs", "size", "used", "avail", "use%"])]
 
-        rows.append(([target, size, used, avail, use],
-                     f"the container's root fs ({fs}); the node's data (partitions, wal, wal_archive) lives here"))
-
-        return self.__table(["MOUNTPOINT", "SIZE", "USED", "AVAIL", "USE%"], rows)
-
-    @staticmethod
-    def __table(header, rows):
-        """
-        :param header: The column titles.
-        :param rows: (fields, annotation) pairs, the fields in the order of the header.
-        :return: One line per row, every field padded to its column's width, so the tab after it lands on the same
-                 stop on every line and the columns line up.
-        """
-        widths = [max(len(title), *(len(row[0][i]) for row in rows)) for i, title in enumerate(header)]
-
-        lines = ["  " + "\t".join(title.ljust(width) for title, width in zip(header, widths))]
-
-        for fields, note in rows:
-            lines.append("  " + "\t".join(field.ljust(width) for field, width in zip(fields, widths)) + "\t" + note)
+        lines.extend(volume_row(name, path, row.split()) for name, path, row in zip(["logs", "data"], paths, rows))
 
         return lines
 
-    def __show(self, node, console_log):
+    def __timeline(self, node, log):
+        """
+        :return: When ignite.log got its last line, and the gap a full volume left in it, if any.
+        """
+        now, timeline = self.ignite.exec_command(node, f"date +%T; {self.TIMELINE} {log}").splitlines()
+        last, silence, start, end = (timeline.split() + [""] * 4)[:4]
+
+        if not last:
+            return "", ""
+
+        gap = f"gap {start} -> {end}, {duration(int(silence))} without a line" \
+            if int(silence) >= self.SILENCE_SEC else ""
+
+        return f"last line {last}, {duration(seconds(now) - seconds(last))} ago", gap
+
+    def __clients(self, before, after):
+        """
+        :return: The puts and failed puts of the load, and the lines of the flood service when it runs.
+        """
+        if not after["progress"]:
+            return [f"  {'load':<12}no progress recorded yet"]
+
+        puts, errors = after["progress"]
+        puts_before = before["progress"][0] if before["progress"] else 0
+
+        lines = [f"  {'load puts':<12}{puts:>10,}  {'+' + format(puts - puts_before, ','):<10}errors {errors}"]
+
+        if after["lines"]:
+            printed = after["lines"][0]
+            printed_before = before["lines"][0] if before["lines"] else 0
+
+            lines.append(f"  {'flood lines':<12}{printed:>10,}  +{printed - printed_before:,}")
+
+        return lines
+
+    def __show(self, node, logs):
         """
         :return: Ready-to-paste commands for the audience, each with a one-line label of what it shows.
         """
@@ -503,21 +535,82 @@ class LogVolumes:
         load_node = self.load.nodes[0]
         control_cmd = f"{self.ignite.script('control.sh')} --host {node.account.externally_routable_ip} --baseline"
 
-        return [
-            "  # cluster state (ACTIVE/INACTIVE, topology, baseline):",
+        lines = [
+            "  # cluster state and baseline:",
             f"  docker exec {host} bash -c \"{control_cmd}\"",
-            "  # both log file sizes, every 2 s (watch: Ctrl-C stops it):",
-            f"  watch -n 2 \"docker exec {host} stat -c '%s %n' {node.log_file} {console_log}\"",
-            "  # ignite.log size only:",
-            f"  watch -n 2 \"docker exec {host} stat -c '%s' {node.log_file}\"",
-            "  # console.log size only:",
-            f"  watch -n 2 \"docker exec {host} stat -c '%s' {console_log}\"",
+            "  # log sizes every 2 s (Ctrl-C stops it):",
+            f"  watch -n 2 \"docker exec {host} stat -c '%s %n' {' '.join(logs)}\"",
             "  # last lines of each log:",
-            f"  docker exec {host} tail -n 5 {node.log_file}",
-            f"  docker exec {host} tail -n 5 {console_log} | cut -c -{self.LINE_WIDTH}",
-            "  # the client's puts and errors (the load app reports once a second):",
-            f"  docker exec {load_node.account.hostname} grep 'progress->' {load_node.log_file} | tail -n 5",
+            f"  docker exec {host} tail -n 5 {logs[0]}",
+            f"  docker exec {host} tail -n 5 {logs[1]} | cut -c -{self.LINE_WIDTH}",
+            "  # the load's puts and errors, once a second:",
+            f"  docker exec {load_node.account.hostname} grep 'progress->' {log_file(self.load)} | tail -n 5",
         ]
+
+        if self.flood:
+            flood_node = self.flood.nodes[0]
+
+            lines.append("  # the lines the flood service wrote, once a second:")
+            lines.append(f"  docker exec {flood_node.account.hostname} grep 'lines->' {log_file(self.flood)} "
+                         f"| tail -n 5")
+
+        return lines
+
+
+def log_file(service):
+    """
+    :return: The service's log4j2 log. node.log_file is a glob, which a command pasted on the host would not expand.
+    """
+    return os.path.join(service.log_dir, "ignite.log")
+
+
+def volume_row(name, path, fields):
+    """
+    :return: A VOLUMES line: the volume's name and path, then df's source, size, used, avail and use%.
+    """
+    source, *numbers = fields
+
+    return f"  {name:<6}{path:<20}{source:<18}" + "".join(f"{number:>7}" for number in numbers)
+
+
+def last_record(app, name):
+    """
+    :return: The numbers the application recorded last under the name, None before its first record.
+    """
+    records = app.extract_results(name)
+
+    return [int(value) for value in records[-1].split()] if records else None
+
+
+def size_text(size):
+    """
+    :return: The size in B, KB or MB.
+    """
+    if size < 1024:
+        return f"{size} B"
+
+    if size < MB:
+        return f"{size / 1024:.1f} KB"
+
+    return f"{size / MB:.1f} MB"
+
+
+def seconds(clock):
+    """
+    :return: Seconds since midnight of an HH:MM:SS time.
+    """
+    hours, minutes, secs = clock.split(":")
+
+    return int(hours) * 3600 + int(minutes) * 60 + int(secs)
+
+
+def duration(secs):
+    """
+    :return: The seconds as "N s" or "N min N s", a day wrapped around midnight.
+    """
+    secs %= 24 * 3600
+
+    return f"{secs} s" if secs < 60 else f"{secs // 60} min {secs % 60} s"
 
 
 def printed_lines(flood):
