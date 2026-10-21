@@ -267,7 +267,7 @@ table.cmds .ok { color: var(--good); }
   <h2>Как строка лога попадает на диск</h2>
   <p class="sub">Три пути, и все три файла лежат на одном томе в 32 МБ.</p>
   <figure>
-    <svg viewBox="0 0 1160 236" role="img" aria-label="Код Ignite пишет через log4j2 в ignite.log и короткий тихий вывод в System.out, ошибки уровня ERROR log4j2 дублирует в System.err. System.out и System.err JVM перенаправлены оболочкой в console.log. Сборщик мусора пишет gc.log. Все три файла лежат на tmpfs 32 МБ.">
+    <svg viewBox="0 0 1160 236" role="img" aria-label="Код Ignite пишет через log4j2 в ignite.log и короткие сообщения quiet-режима в System.out, ошибки уровня ERROR log4j2 дублирует в System.err. System.out и System.err JVM перенаправлены оболочкой в console.log. Сборщик мусора пишет gc.log. Все три файла лежат на tmpfs 32 МБ.">
       <defs>
         <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -297,21 +297,21 @@ table.cmds .ok { color: var(--good); }
 
         <rect x="280" y="108" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
         <text x="380" y="131" font-size="16" font-weight="700" text-anchor="middle">System.out / err</text>
-        <text x="380" y="150" font-size="13" text-anchor="middle" opacity=".75">дескрипторы 1 и 2</text>
+        <text x="380" y="150" font-size="13" text-anchor="middle" opacity=".75">stdout и stderr процесса</text>
 
         <line x1="200" y1="64" x2="276" y2="64" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
         <line x1="200" y1="134" x2="276" y2="134" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
         <line x1="200" y1="82" x2="276" y2="116" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
-        <text x="290" y="103" font-size="12" opacity=".85">тихий вывод</text>
+        <text x="290" y="103" font-size="12" opacity=".85">quiet-режим</text>
         <line x1="380" y1="90" x2="380" y2="104" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
         <text x="390" y="103" font-size="12" opacity=".85" dx="8">только ERROR</text>
 
         <line x1="480" y1="64" x2="866" y2="64" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
-        <text x="506" y="55" font-size="13" opacity=".85">appender FILE, файл до 10 МБ</text>
+        <text x="506" y="55" font-size="13" opacity=".85">файл с ротацией по 10 МБ</text>
         <line x1="480" y1="134" x2="866" y2="134" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
         <text x="506" y="125" font-size="13" opacity=".85" font-family="ui-monospace, Consolas, monospace">ignite.sh … &gt;&gt; console.log 2&gt;&amp;1</text>
         <line x1="200" y1="202" x2="866" y2="202" stroke="currentColor" stroke-width="1.6" marker-end="url(#a3)"/>
-        <text x="506" y="193" font-size="13" opacity=".85">unified logging JVM</text>
+        <text x="506" y="193" font-size="13" opacity=".85">логирование JVM</text>
 
         <rect x="870" y="38" width="200" height="52" rx="10" fill="var(--surface)" stroke="currentColor"/>
         <text x="970" y="70" font-size="17" font-weight="600" text-anchor="middle" font-family="ui-monospace, Consolas, monospace">ignite.log</text>
@@ -328,7 +328,7 @@ table.cmds .ok { color: var(--good); }
     <div><b>GC → gc.log</b>JVM один раз пишет «Could not flush log» в stderr и работает дальше. Место вернулось — пишет снова.</div>
   </div>
   <p class="verdict">Ошибка записи не доходит до кода узла — <strong>узел работает дальше</strong>.</p>
-  <p class="note">Обычно ducktests пропускает вывод узла через <code>tee</code>: тогда ошибку получает tee, а не JVM, и tee больше не пишет в файл. Тест запускает узел как <code>nohup</code>: JVM сама пишет в <code>console.log</code>.</p>
+  <p class="note">Для прома: логи здесь на своём томе. Штатный конфиг пишет их в <code>work/log</code>, на том с данными, и тогда полный диск — это полный том данных: узел останавливается. Вывод узла тест направляет в файл, как <code>nohup</code>, чтобы ошибку записи получала сама JVM.</p>
   <div class="footer"><span>Путь логов</span><span class="num"></span></div>
 </section>
 
