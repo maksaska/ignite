@@ -324,7 +324,7 @@ table.cmds .ok { color: var(--good); }
   <div class="effects">
     <div><b>log4j2 → ignite.log</b>ловит ошибку записи, сообщает о ней в stderr не чаще раза в 5 минут. <code>log.info()</code> возвращается как обычно.</div>
     <div><b>System.out → console.log</b>PrintStream глотает ошибку записи: <code>println()</code> не падает и не блокируется.</div>
-    <div><b>GC → gc.log</b>JVM пишет «Could not write log» в stderr и работает дальше.</div>
+    <div><b>GC → gc.log</b>JVM один раз пишет «Could not flush log» в stderr и работает дальше. Место вернулось — пишет снова.</div>
   </div>
   <p class="verdict">Ошибка записи не доходит до кода узла — <strong>узел работает дальше</strong>.</p>
   <p class="note">Обычно ducktests пропускает вывод узла через <code>tee</code>: тогда ошибку получает tee, а не JVM, и tee больше не пишет в файл. Тест запускает узел как <code>nohup</code>: JVM сама пишет в <code>console.log</code>.</p>
@@ -356,7 +356,7 @@ table.cmds .ok { color: var(--good); }
       <ul>
         <li>put идут без ошибок</li>
         <li>кластер ACTIVE</li>
-        <li>последняя запись в лог отклонена — том правда полон</li>
+        <li>запись в ignite.log, console.log и gc.log отклонена — том правда полон</li>
         <li>флудер: сервис продолжает писать</li>
       </ul>
     </div>
@@ -490,7 +490,7 @@ SHOW <span class="badge">6</span>
     <thead><tr><th>Команда</th><th>Что показывает</th><th>Том полон</th><th>Место вернулось</th></tr></thead>
     <tbody>
       <tr><td>control.sh --baseline</td><td>состояние кластера и baseline</td><td class="ok">ACTIVE, узел в baseline</td><td class="ok">ACTIVE</td></tr>
-      <tr><td>watch -n 2 "… stat -c '%s %n' ignite.log console.log"</td><td>размеры логов каждые 2 секунды</td><td class="full">числа стоят</td><td class="ok">ignite.log растёт</td></tr>
+      <tr><td>watch -n 2 "… stat -c '%s %n' ignite.log console.log"</td><td>размеры логов каждые 2 секунды</td><td class="full">числа стоят</td><td class="ok">растут</td></tr>
       <tr><td>tail -n 5 ignite.log</td><td>последние строки лога</td><td class="full">последняя строка старая</td><td class="ok">свежие строки</td></tr>
       <tr><td>grep 'progress-&gt;' (клиент)</td><td>put и ошибки клиента раз в секунду</td><td class="ok">put растут, ошибок 0</td><td class="ok">так же</td></tr>
       <tr><td>grep 'lines-&gt;' (флудер)</td><td>сколько строк написал сервис</td><td class="ok">растёт: сервис пишет в никуда</td><td>сервис отменён</td></tr>
