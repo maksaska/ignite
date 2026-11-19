@@ -22,6 +22,7 @@ import org.apache.ignite.internal.processors.query.calcite.exec.NumericTypesPrec
 import org.apache.ignite.internal.processors.query.calcite.message.CalciteCommunicationMessageSerializationTest;
 import org.apache.ignite.internal.processors.query.calcite.schema.IgniteStatisticsImplRollingUpgradeTest;
 import org.apache.ignite.internal.processors.query.calcite.schema.IgniteStatisticsImplTest;
+import org.apache.ignite.internal.processors.query.calcite.schema.RangeSelectTableScanReproducerTest;
 import org.apache.ignite.internal.processors.query.calcite.sql.ParserCodegenResourcesTest;
 import org.apache.ignite.internal.processors.query.calcite.sql.SqlCustomParserTest;
 import org.apache.ignite.internal.processors.query.calcite.sql.SqlReservedWordsTest;
@@ -56,6 +57,7 @@ import org.junit.platform.suite.api.Suite;
     SqlTransactionsTopologyChangeTest.class,
     IgniteStatisticsImplTest.class,
     IgniteStatisticsImplRollingUpgradeTest.class,
+    RangeSelectTableScanReproducerTest.class,
 })
 public class IgniteCalciteTestSuite {
 }
